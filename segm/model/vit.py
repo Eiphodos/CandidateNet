@@ -118,7 +118,7 @@ class VisionTransformer(nn.Module):
     def forward(self, im, policynet_pred=None, return_features=False):
         B, _, H, W = im.shape
         PS = self.patch_size
-
+        #print("image shape before: {}".format(im.shape))
         # pre-process the images and reduce number of patches
         if self.policy_method == 'policy_net':
             policy_indices = policy_indices_by_policynet_pred(im, patch_size=PS,
@@ -132,6 +132,7 @@ class VisionTransformer(nn.Module):
         x, policy_code = images_to_patches(im, patch_size=PS, policy_indices=policy_indices)
         num_patches = policy_code.size(1)
         x = self.patch_embed(x)
+        #print("token shape after: {}".format(x.shape))
         cls_tokens = self.cls_token.expand(B, -1, -1)
         if self.distilled:
             dist_tokens = self.dist_token.expand(B, -1, -1)

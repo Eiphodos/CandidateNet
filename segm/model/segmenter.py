@@ -27,7 +27,7 @@ class Segmenter(nn.Module):
 
         if self.model_cfg["policy_method"] == 'policy_net':
             self.policy_net = PolicyNet()
-            '''
+
             if self.policynet_ckpt is not None:
                 try:
                     self.policy_net.load_state_dict(torch.load(self.policynet_ckpt))
@@ -35,7 +35,7 @@ class Segmenter(nn.Module):
                     Warning('PolicyNet checkpoint path {} cannot be found, so cannot be loaded. This is problematic during training, because the network requires the PolicyNet to be initialized. It should not be a problem during inference, when the PolicyNet weights are embedded in the network weights, and should be loaded later. Verify the quality of the predictions to be sure.')
             else:
                 raise Warning('PolicyNet checkpoint path is None, so the weights of the policynet are intialized randomly. Check that this is desired behavior.')
-            '''
+
             for p in self.policy_net.parameters():
                 p.requires_grad = True
 
@@ -60,7 +60,6 @@ class Segmenter(nn.Module):
         H, W = im.size(2), im.size(3)
 
         x, policy_code, policy_indices = self.encoder(im, policy_pred, return_features=True)
-
         # remove CLS/DIST tokens for decoding
         num_extra_tokens = 1 + self.encoder.distilled
         x = x[:, num_extra_tokens:]

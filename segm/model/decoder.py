@@ -90,21 +90,26 @@ class MaskTransformer(nn.Module):
         for blk in self.blocks:
             x = blk(x)
         x = self.decoder_norm(x)
-
+        #print("decoded token shape: {}".format(x.shape))
         patches, cls_seg_feat = x[:, : -self.n_cls], x[:, -self.n_cls :]
         patches = patches @ self.proj_patch
         cls_seg_feat = cls_seg_feat @ self.proj_classes
 
         patches = patches / patches.norm(dim=-1, keepdim=True)
         cls_seg_feat = cls_seg_feat / cls_seg_feat.norm(dim=-1, keepdim=True)
-
+        #print("patches shape: {}".format(patches.shape))
+        #print("cls_seg_feat shape: {}".format(cls_seg_feat.shape))
         masks = patches @ cls_seg_feat.transpose(1, 2)
+        #print("masks shape: {}".format(masks.shape))
         masks = self.mask_norm(masks)
 
         masks = masks.unsqueeze(1)
         masks = rearrange(masks, "b h w c -> b c h w")
+        print("masks shape: {}".format(masks.shape))
+        print(patch_code.shape)
+        #print(patch_code)
         masks = patches_to_images(masks, patch_code, (GS, GS))
-
+        print("masks shape: {}".format(masks.shape))
         return masks
 
     def get_attention_map(self, x, layer_id):
