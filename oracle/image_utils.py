@@ -143,3 +143,10 @@ def patches_to_images(patches, policy_code, grid_size):
     images = rearrange(patch_uni_global, 'b (hp wp) c h w -> b c (hp h) (wp w)', hp=num_grid_h, wp=num_grid_w)
 
     return images
+
+
+def convert_1d_index_to_2d(one_dim_index, patch_size):
+    x_coord = one_dim_index // patch_size
+    y_coord = one_dim_index % patch_size
+    two_dim_index = torch.stack([x_coord, y_coord])
+    return two_dim_index
