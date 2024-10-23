@@ -149,4 +149,28 @@ def convert_1d_index_to_2d(one_dim_index, patch_size):
     x_coord = one_dim_index // patch_size
     y_coord = one_dim_index % patch_size
     two_dim_index = torch.stack([x_coord, y_coord])
+    two_dim_index = two_dim_index.permute(1, 0)
     return two_dim_index
+
+def convert_2d_index_to_1d(two_dim_index, patch_size):
+    one_dim_index = two_dim_index[:, 0] * patch_size + two_dim_index[:, 1]
+    return one_dim_index
+
+def get_2d_coords_scale_from_h_w_ps(height, width, patch_size, scale):
+    patches_coords = torch.meshgrid(torch.arange(0, height // patch_size), torch.arange(0, width // patch_size), indexing='ij')
+    patches_coords = torch.stack([patches_coords[0], patches_coords[1]])
+    patches_coords = patches_coords.permute(1, 2, 0)
+    patches_coords = patches_coords.view(-1, 2)
+    n_patches = patches_coords.shape[0]
+
+    scale_lvl = torch.tensor([[scale]] * n_patches)
+    patches_scale_coords = torch.cat([scale_lvl, patches_coords], dim=1)
+    return patches_scale_coords
+
+def get_1d_coords_scale_from_h_w_ps(height, width, patch_size, scale):
+    n_patches = (height // patch_size) * (width // patch_size)
+    patches_coords = torch.arange(n_patches).view(-1, 1)
+
+    scale_lvl = torch.tensor([[scale]] * n_patches)
+    patches_scale_coords = torch.cat([scale_lvl, patches_coords], dim=1)
+    return patches_scale_coords

@@ -9,6 +9,8 @@ import torch.nn as nn
 from oracle.models.utils import init_weights
 from oracle.models.blocks import Block
 
+from oracle.image_utils import get_1d_coords_scale_from_h_w_ps, convert_1d_index_to_2d, convert_2d_index_to_1d
+
 from timm.models.layers import DropPath
 from timm.models.layers import trunc_normal_
 from timm.models.vision_transformer import _load_weights
@@ -96,23 +98,63 @@ class VisionTransformer(nn.Module):
     def load_pretrained(self, checkpoint_path, prefix=""):
         _load_weights(self, checkpoint_path, prefix)
 
-    def divide_tokens(self, tokens, oracle_labels, patches_scale_coords, lvl):
-        #oracle_labels = oracle_labels.view(-1)
-        ind_to_split = oracle_labels == 0
-        ind_to_keep = oracle_labels == 1
+    def divide_tokens_coords_on_scale(self, tokens, patches_scale_coords, curr_scale):
+        indx_curr_scale = patches_scale_coords[:, 0] == curr_scale
+        indx_old_scales = patches_scale_coords[:, 0] != curr_scale 
+        coords_at_curr_scale = patches_scale_coords[indx_curr_scale]
+        coords_at_older_scales = patches_scale_coords[indx_old_scales]
+        tokens_at_curr_scale = tokens[:, indx_curr_scale, :]
+        tokens_at_older_scale = tokens[:, indx_old_scales, :]
 
-        patches_at_curr_res = patches_scale_coords[patches_scale_coords[:, 0] == lvl]
-        low_res_tokens_to_keep = tokens[patches_scale_coords[:, 0] != lvl]
-        oracle_labels_at_curr_res = oracle_labels[:, patches_at_curr_res[:, 1], patches_at_curr_res[:, 2]]
-
-        ind_to_split = oracle_labels_at_curr_res == 0
-        ind_to_keep = oracle_labels_at_curr_res == 1
-
-        tokens_to_split = tokens[:, ind_to_split, :]
-        tokens_to_keep = tokens[:, ind_to_keep, :]
+        return tokens_at_curr_scale, coords_at_curr_scale, tokens_at_older_scale, coords_at_older_scales
 
 
-        return tokens_to_split
+    def divide_tokens_to_split_and_keep(self, tokens_at_curr_scale, patches_scale_coords_curr_scale, split_choices_curr_scale):
+        indx_for_choice = patches_scale_coords_curr_scale[:, 1]
+        choices_for_scale = split_choices_curr_scale[indx_for_choice]
+        tokens_to_keep = tokens_at_curr_scale[:, choices_for_scale == 1, :]
+        tokens_to_split = tokens_at_curr_scale[:, choices_for_scale == 0, :]
+        coords_to_keep = patches_scale_coords_curr_scale[choices_for_scale == 1]
+        coords_to_split = patches_scale_coords_curr_scale[choices_for_scale == 0]
+
+        return tokens_to_split, coords_to_split, tokens_to_keep, coords_to_keep
+
+    def split_tokens(self, tokens_to_split, curr_scale):
+        x_splitted = rearrange(tokens_to_split, 'b n (s d) -> b n s d', s=self.split_ratio)
+        x_splitted = self.splits[curr_scale](x_splitted)
+        x_splitted = rearrange(x_splitted, 'b n s d -> b (n s) d', s=self.split_ratio)
+        return x_splitted
+
+    def split_coords(self, coords_to_split, patch_size, curr_scale):
+        new_scale = curr_scale + 1
+        new_coord_ratio = self.split_ratio // 2
+        two_d_coords = convert_1d_index_to_2d(coords_to_split[:, 1], patch_size)
+        a = torch.stack([two_d_coords[:, 0] * new_coord_ratio, two_d_coords[:, 1] * new_coord_ratio])
+        b = torch.stack([two_d_coords[:, 0] * new_coord_ratio, two_d_coords[:, 1] * new_coord_ratio + 1])
+        c = torch.stack([two_d_coords[:, 0] * new_coord_ratio + 1, two_d_coords[:, 1] * new_coord_ratio])
+        d = torch.stack([two_d_coords[:, 0] * new_coord_ratio + 1, two_d_coords[:, 1] * new_coord_ratio + 1])
+
+        new_coords_2dim = torch.stack([a, b, c, d]).permute(2, 0, 1)
+        new_coords_2dim = rearrange(new_coords_2dim, 'n s c -> (n s) c', s=self.split_ratio, c=2)
+        new_coords_1dim = convert_2d_index_to_1d(new_coords_2dim, patch_size).unsqueeze(1)
+
+        scale_lvl = torch.tensor([[new_scale]] * new_coords_1dim.shape[0]).to('cuda')
+        patches_scale_coords = torch.cat([scale_lvl, new_coords_1dim], dim=1)
+
+        return patches_scale_coords
+         
+
+    def split_input(self, tokens, oracle_labels, patches_scale_coords, curr_scale, patch_size):
+        tokens_at_curr_scale, coords_at_curr_scale, tokens_at_older_scale, coords_at_older_scales = self.divide_tokens_coords_on_scale(tokens, patches_scale_coords, curr_scale)
+        tokens_to_split, coords_to_split, tokens_to_keep, coords_to_keep = self.divide_tokens_to_split_and_keep(tokens_at_curr_scale, coords_at_curr_scale, oracle_labels.view(-1))
+        tokens_after_split = self.split_tokens(tokens_to_split, curr_scale)
+        coords_after_split = self.split_coords(coords_to_split, patch_size, curr_scale)
+
+        all_tokens = torch.cat([tokens_at_older_scale, tokens_to_keep, tokens_after_split], dim=1)
+        all_coords = torch.cat([coords_at_older_scales, coords_to_keep, coords_after_split], dim=0)
+
+        return all_tokens, all_coords
+
 
     def forward(self, im, oracle_labels):
         B, _, H, W = im.shape
@@ -120,19 +162,13 @@ class VisionTransformer(nn.Module):
         x = self.patch_embed(im)
         x = x + self.pos_embed
 
-        patches_coords = torch.meshgrid(torch.arange(0, H // PS), torch.arange(0, H // PS), indexing='ij')
-        patches_coords = torch.stack([patches_coords[0], patches_coords[1]])
-        patches_coords = patches_coords.permute(1, 2, 0)
-        patches_coords = patches_coords.view(-1, 2)
-
-        scale_lvl = torch.tensor([[0]] * self.patch_embed.num_patches)
-        patches_scale_coords = torch.cat([scale_lvl, patches_coords], dim=1)
+        scale = 0
+        patches_scale_coords = get_1d_coords_scale_from_h_w_ps(H, W, PS, scale).to('cuda')
 
         for blk_idx in range(len(self.blocks)):
             x = self.blocks[blk_idx](x)
-            x_to_keep, x_to_split = self.divide_tokens(x, oracle_labels, patches_scale_coords, blk_idx)
-            x_splitted = rearrange(x_to_split, 'b n (d s) -> b (n s) d', s=self.split_ratio)
-            x_splitted = self.splits[blk_idx](x_splitted)
-            x = torch.cat([x_to_keep, x_splitted], dim=1)
-
+            if blk_idx < len(self.blocks) - 1: 
+                ol =  oracle_labels[blk_idx]
+                x, patches_scale_coords = self.split_input(x, ol, patches_scale_coords, blk_idx, PS)
+                PS /= 2
         return x
