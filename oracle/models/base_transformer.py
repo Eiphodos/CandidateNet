@@ -136,9 +136,9 @@ class VisionTransformer(nn.Module):
 
         new_coords_2dim = torch.stack([a, b, c, d]).permute(2, 0, 1)
         new_coords_2dim = rearrange(new_coords_2dim, 'n s c -> (n s) c', s=self.split_ratio, c=2)
-        new_coords_1dim = convert_2d_index_to_1d(new_coords_2dim, patch_size).unsqueeze(1)
+        new_coords_1dim = convert_2d_index_to_1d(new_coords_2dim, patch_size).unsqueeze(1).long()
 
-        scale_lvl = torch.tensor([[new_scale]] * new_coords_1dim.shape[0]).to('cuda')
+        scale_lvl = torch.tensor([[new_scale]] * new_coords_1dim.shape[0]).to('cuda').long()
         patches_scale_coords = torch.cat([scale_lvl, new_coords_1dim], dim=1)
 
         return patches_scale_coords
@@ -167,8 +167,9 @@ class VisionTransformer(nn.Module):
 
         for blk_idx in range(len(self.blocks)):
             x = self.blocks[blk_idx](x)
+            print("Current number of tokens in layer {}: {}".format(blk_idx, x.shape[1]))
             if blk_idx < len(self.blocks) - 1: 
                 ol =  oracle_labels[blk_idx]
                 x, patches_scale_coords = self.split_input(x, ol, patches_scale_coords, blk_idx, PS)
                 PS /= 2
-        return x
+        return x, patches_scale_coords
