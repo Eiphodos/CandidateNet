@@ -159,11 +159,12 @@ class VisionTransformer(nn.Module):
     def forward(self, im, oracle_labels):
         B, _, H, W = im.shape
         PS = self.patch_size
+        patched_im_size = H // PS
         x = self.patch_embed(im)
         x = x + self.pos_embed
 
         scale = 0
-        patches_scale_coords = get_1d_coords_scale_from_h_w_ps(H, W, PS, scale).to('cuda')
+        patches_scale_coords = get_1d_coords_scale_from_h_w_ps(H, W, patched_im_size, scale).to('cuda')
 
         for blk_idx in range(len(self.blocks)):
             x = self.blocks[blk_idx](x)
@@ -171,5 +172,5 @@ class VisionTransformer(nn.Module):
             if blk_idx < len(self.blocks) - 1: 
                 ol =  oracle_labels[blk_idx]
                 x, patches_scale_coords = self.split_input(x, ol, patches_scale_coords, blk_idx, PS)
-                PS /= 2
+                patched_im_size /= 2
         return x, patches_scale_coords

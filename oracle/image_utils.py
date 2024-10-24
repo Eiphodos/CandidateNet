@@ -145,15 +145,15 @@ def patches_to_images(patches, policy_code, grid_size):
     return images
 
 
-def convert_1d_index_to_2d(one_dim_index, patch_size):
-    x_coord = one_dim_index // patch_size
-    y_coord = one_dim_index % patch_size
+def convert_1d_index_to_2d(one_dim_index, PS):
+    x_coord = one_dim_index // PS
+    y_coord = one_dim_index % PS
     two_dim_index = torch.stack([x_coord, y_coord])
     two_dim_index = two_dim_index.permute(1, 0)
     return two_dim_index
 
-def convert_2d_index_to_1d(two_dim_index, patch_size):
-    one_dim_index = two_dim_index[:, 0] * patch_size + two_dim_index[:, 1]
+def convert_2d_index_to_1d(two_dim_index, PS):
+    one_dim_index = two_dim_index[:, 0] * PS + two_dim_index[:, 1]
     return one_dim_index
 
 def get_2d_coords_scale_from_h_w_ps(height, width, patch_size, scale):
@@ -174,3 +174,14 @@ def get_1d_coords_scale_from_h_w_ps(height, width, patch_size, scale):
     scale_lvl = torch.tensor([[scale]] * n_patches)
     patches_scale_coords = torch.cat([scale_lvl, patches_coords], dim=1)
     return patches_scale_coords
+
+def convert_scale_to_coords_in_full_res(one_dim_coords, patch_size):
+    new_coords_all = []
+    for coord in one_dim_coords:
+        print(coord)
+        new_coords = torch.stack(torch.meshgrid(torch.arange(coord*patch_size, coord*patch_size + patch_size), torch.arange(coord*patch_size, coord*patch_size + patch_size))).permute(1,2,0).view(-1, 2)
+        new_coords_one_dim = convert_2d_index_to_1d(new_coords, patch_size)
+        new_coords_all.append(new_coords_one_dim)
+    return torch.cat(new_coords_all, dim=0)
+
+
