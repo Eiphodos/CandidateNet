@@ -175,13 +175,15 @@ def get_1d_coords_scale_from_h_w_ps(height, width, patch_size, scale):
     patches_scale_coords = torch.cat([scale_lvl, patches_coords], dim=1)
     return patches_scale_coords
 
-def convert_scale_to_coords_in_full_res(one_dim_coords, patch_size):
+def convert_scale_to_coords_in_full_res(one_dim_coords, patch_size, im_size):
+    patch_size_2d = im_size // patch_size
     new_coords_all = []
     for coord in one_dim_coords:
-        print(coord)
-        new_coords = torch.stack(torch.meshgrid(torch.arange(coord*patch_size, coord*patch_size + patch_size), torch.arange(coord*patch_size, coord*patch_size + patch_size))).permute(1,2,0).view(-1, 2)
-        new_coords_one_dim = convert_2d_index_to_1d(new_coords, patch_size)
+        x_values = torch.arange((coord // patch_size_2d)*patch_size, (coord // patch_size_2d)*patch_size + patch_size)
+        y_values = torch.arange((coord % patch_size_2d)*patch_size, (coord % patch_size_2d)*patch_size + patch_size)
+        new_coords = torch.stack(torch.meshgrid(x_values, y_values)).permute(1,2,0).view(-1, 2)
+        new_coords_one_dim = convert_2d_index_to_1d(new_coords, im_size)
         new_coords_all.append(new_coords_one_dim)
-    return torch.cat(new_coords_all, dim=0)
+    return torch.cat(new_coords_all, dim=0).long()
 
 
