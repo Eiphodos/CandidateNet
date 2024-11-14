@@ -98,15 +98,13 @@ class MaskTransformer(nn.Module):
         cls_seg_feat = cls_seg_feat / cls_seg_feat.norm(dim=-1, keepdim=True)
         masks = patches @ cls_seg_feat.transpose(1, 2)
         masks = self.mask_norm(masks)
-        print("initial masks shape: {}".format(masks.shape))
+        #print("initial masks shape: {}".format(masks.shape))
         masks = masks.unsqueeze(1)
         masks = rearrange(masks, "b h w c -> b c h w")
-        print("masks shape after rearrange: {}".format(masks.shape))
-        print(" patch_code shape: {}".format(patch_code.shape))
-        print(patch_code[:,2,:])
-        print(patch_code[:,12,:])
+        #print("masks shape after rearrange: {}".format(masks.shape))
+        #print(" patch_code shape: {}".format(patch_code.shape))
         masks = patches_to_images(masks, patch_code, (GS, GS))
-        print("masks shape after p2i: {}".format(masks.shape))
+        #print("masks shape after p2i: {}".format(masks.shape))
         return masks
 
     def get_attention_map(self, x, layer_id):

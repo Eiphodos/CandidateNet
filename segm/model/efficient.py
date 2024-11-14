@@ -143,6 +143,7 @@ def patches_to_images(patches, policy_code, grid_size):
     num_patch = ps_times_num_patch // patch_size
     num_grid_h, num_grid_w = grid_size  # grid size is based on the original base patch size
     patches = rearrange(patches, 'b c hp (np wp) ->b np c hp wp', np=num_patch)
+    #print("patch size after first rearrage: {}".format(patches.shape))
     num_total_grid = num_grid_h * num_grid_w
 
     scale_value = policy_code[:, :, 0]
@@ -152,9 +153,12 @@ def patches_to_images(patches, policy_code, grid_size):
     scale_1_idx = scale_value == 1
 
     patch_scale_1 = patches[scale_1_idx]
+    #print("patches shape at original scale: {}".format(patch_scale_1.shape))
     patch_scale_1 = rearrange(patch_scale_1, '(b np) c h w -> b np c h w', b=batch_size)
     grid_coord_1 = grid_coords[scale_1_idx].unsqueeze(1)
     grid_coord_1 = rearrange(grid_coord_1, '(b np) ng c -> b (np ng) c', b=batch_size)
+    #print("patches shape at original scale after rearrange: {}".format(patch_scale_1.shape))
+    #print("grid coords shape at original scale after rearrange: {}".format(grid_coord_1.shape))
 
     # process patches that are downsize by the factor of 2
     scale_2_idx = scale_value == 2
@@ -166,10 +170,14 @@ def patches_to_images(patches, policy_code, grid_size):
 
     # find and enlarege the patches that are downsize before, and break it into 4 pieces
     patch_scale_2 = patches[scale_2_idx]
+    #print("patches2 shape at low res: {}".format(patch_scale_2.shape))
     patch_scale_2 = F.interpolate(patch_scale_2, scale_factor=2, mode='bilinear', align_corners=False,
                                   recompute_scale_factor=False)  # stacked across batch dim
+    #print("patches2 shape at after interpolation: {}".format(patch_scale_2.shape))                           
     patch_scale_2 = rearrange(patch_scale_2, 'b c (h1 h) (w1 w) -> b (h1 w1) c h w', h1=2, w1=2)
+    #print("patches2 shape at after rearrange 1: {}".format(patch_scale_2.shape))   
     patch_scale_2 = rearrange(patch_scale_2, '(b np) ng c ps_h ps_w  -> b (np ng) c ps_h ps_w', b=batch_size)
+    #print("patches2 shape at after rearrange 2: {}".format(patch_scale_2.shape))  
 
     # combine all the restored patches (of the same size and scale) together, total size should be 'num_total_grid'
     # even one shuffle the patches and grid value, it will be sorted later anyway
@@ -183,7 +191,16 @@ def patches_to_images(patches, policy_code, grid_size):
     grid_sort_global = batch_offset + grid_uni_value
     grid_sort_global = grid_sort_global.view(-1)
     patch_uni_global = rearrange(patches_uni, 'b np c h w -> (b np) c h w')
+    #print("Indices grid shape: {}".format(grid_sort_global.shape))
+    #print("Indices grid first 10 N: {}".format(grid_sort_global[0:10]))
+    #print("Indices grid min: {}".format(grid_sort_global.min()))
+    #print("Indices grid max: {}".format(grid_sort_global.max()))
     indices_global = torch.argsort(grid_sort_global)
+    #print("Indices global shape: {}".format(indices_global.shape))
+    #print("Indices global first 10 N: {}".format(indices_global[0:10]))
+    #print("Indices global min: {}".format(indices_global.min()))
+    #print("Indices global max: {}".format(indices_global.max()))
+    #print("grid pos using indices: {}".format(grid_sort_global[indices_global[0]]))
     patch_uni_global = patch_uni_global[indices_global]
 
     patch_uni_global = rearrange(patch_uni_global, '(b np) c h w  -> b np c h w', b=batch_size)
