@@ -7,13 +7,10 @@ import torch
 import torch.nn as nn
 
 from oracle.models.utils import init_weights
-from oracle.models.blocks import Block
+from oracle.models.blocks import Block, DropPath
 
 from oracle.image_utils import get_1d_coords_scale_from_h_w_ps, convert_1d_index_to_2d, convert_2d_index_to_1d
 
-from timm.models.layers import DropPath
-from timm.models.layers import trunc_normal_
-from timm.models.vision_transformer import _load_weights
 from einops import rearrange
 
 
@@ -36,6 +33,29 @@ class PatchEmbedding(nn.Module):
         B, C, H, W = im.shape
         x = self.proj(im).flatten(2).transpose(1, 2)
         return x
+    
+
+class TransformerLayer(nn.Module):
+    def __init__(
+        self,
+        n_blocks,
+        dim,
+        n_heads,
+        dim_ff,
+        dropout=0.0,
+        drop_path_rate=0.0,
+        ):
+        super().__init__()
+
+        # transformer blocks
+        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, n_blocks)]
+        self.blocks = nn.ModuleList(
+            [Block(dim, n_heads, dim_ff, dropout, dpr) for i in range(n_blocks)]
+        )
+
+    def forward(self, x):
+        for blk_idx in range(len(self.blocks)):
+            x = self.blocks[blk_idx](x)
 
 
 class VisionTransformer(nn.Module):
@@ -71,13 +91,12 @@ class VisionTransformer(nn.Module):
         self.n_scales = n_scales
         # Pos Embs
         self.pos_embed = nn.Parameter(torch.randn(1, self.patch_embed.num_patches, d_model))
-        self.rel_pos_embs = nn.ParameterList([nn.Parameter(torch.randn(1, self.split_ratio, d_model)) for i in range(n_scales - 1)])
+        self.rel_pos_embs = nn.ParameterList([nn.Parameter(torch.randn(1, self.split_ratio, d_model[i + 1])) for i in range(n_scales - 1)])
 
 
-        # transformer blocks
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, n_layers)]
-        self.blocks = nn.ModuleList(
-            [Block(d_model, n_heads, d_ff, dropout, dpr[i]) for i in range(n_layers)]
+        # transformer layers
+        self.layers = nn.ModuleList(
+            [TransformerLayer(n_layers[i], d_model[i], n_heads[i], d_model[i]*4, dropout, drop_path_rate) for i in range(len(n_layers))]
         )
 
         # Split layers
@@ -86,7 +105,7 @@ class VisionTransformer(nn.Module):
         )
 
 
-        trunc_normal_(self.pos_embed, std=0.02)
+        nn.init.trunc_normal_(self.pos_embed, std=0.02)
         self.pre_logits = nn.Identity()
 
         self.apply(init_weights)

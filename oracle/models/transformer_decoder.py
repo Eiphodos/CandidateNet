@@ -8,13 +8,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from oracle.models.utils import init_weights
-from oracle.models.blocks import Block
+from oracle.models.blocks import Block, DropPath
 
 from oracle.image_utils import patches_to_images, convert_1d_patched_index_to_2d_org_index
 
-from timm.models.layers import DropPath
-from timm.models.layers import trunc_normal_
-from timm.models.vision_transformer import _load_weights
 from einops import rearrange
 
 
@@ -63,6 +60,7 @@ class SegmentationTransformer(nn.Module):
         self.decoder_norm = nn.LayerNorm(d_model)
         self.mask_norm = nn.LayerNorm(self.internal_dim)
 
+
         minimum_resolution = image_size[0] // (patch_size // 2**(n_scales-1))
         upsampling_ratio = image_size[0] // minimum_resolution
         self.conv_up_proj = nn.ConvTranspose2d(self.internal_dim, self.internal_dim, kernel_size=upsampling_ratio, stride=upsampling_ratio)
@@ -70,7 +68,7 @@ class SegmentationTransformer(nn.Module):
         self.conv_out_proj = nn.Conv2d(self.internal_dim, self.n_cls, kernel_size=3, stride=1, padding=1)
 
         self.apply(init_weights)
-        trunc_normal_(self.cls_emb, std=0.02)
+        nn.init.trunc_normal_(self.cls_emb, std=0.02)
 
 
     @torch.jit.ignore()
