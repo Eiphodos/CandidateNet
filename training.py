@@ -38,13 +38,19 @@ def main(args):
                           monai.transforms.RandAdjustContrastd(keys=['image'], prob=0.1),
                           monai.transforms.RandZoomd(keys=['image', 'label'], prob=0.1, min_zoom=0.8, max_zoom=1.2)
                           ]
-              transform_list = transform_list + aug_list
+              transform_list_train = transform_list + aug_list
+    else:
+        transform_list_train = transform_list
+    transform_list_train.append(monai.transforms.ToTensord(keys=["image", "label"]))
 
-    transform_list.append(monai.transforms.ToTensord(keys=["image", "label"]))
-    transforms = monai.transforms.Compose(transform_list)
+    transform_list_val = transform_list
+    transform_list_val.append(monai.transforms.ToTensord(keys=["image", "label"]))
 
-    train_dataset = monai.data.Dataset(train_data, transform=transforms)
-    val_dataset = monai.data.Dataset(val_data, transform=transforms)
+    transforms_train = monai.transforms.Compose(transform_list_train)
+    transforms_val = monai.transforms.Compose(transform_list_val)
+
+    train_dataset = monai.data.Dataset(train_data, transform=transforms_train)
+    val_dataset = monai.data.Dataset(val_data, transform=transforms_val)
 
     data_loader_val = monai.data.DataLoader(
         val_dataset,
