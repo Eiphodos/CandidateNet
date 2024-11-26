@@ -84,7 +84,7 @@ def main(args):
     print("Decoder parameters: {}".format(count_parameters(model.decoder)))
 
     ### OPTIMIZER/CRITERION ###
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.wd)
     criterion = monai.losses.DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=False)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
 
@@ -170,6 +170,7 @@ if __name__ == '__main__':
     parser.add_argument('--image_size', type=int, default=512)
     parser.add_argument('--epochs', type=int, default=500)
     parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--wd', type=float, default=1e-5)
     parser.add_argument('--val_every_n_epochs', type=int, default=10)
     parser.add_argument('--wandb_logging', action='store_true')
     parser.add_argument('--augment', action='store_true')
