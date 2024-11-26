@@ -29,10 +29,18 @@ def main(args):
               monai.transforms.EnsureChannelFirstD(keys=['image', "label"]),
               monai.transforms.NormalizeIntensityd(keys=['image'], divisor=[255, 255, 255], channel_wise=True),
               monai.transforms.ScaleIntensityRanged(keys=['label'], a_min=0, a_max=255, b_min=0, b_max=1,clip=True),
-              #monai.transforms.BorderPadd(keys=['image', 'label'], spatial_border=80),
               monai.transforms.Resized(keys=["image"], spatial_size=(512, 512), mode='bilinear'),
-              monai.transforms.Resized(keys=["label"], spatial_size=(512, 512), mode='nearest'),
-              monai.transforms.ToTensord(keys=["image", "label"])]
+              monai.transforms.Resized(keys=["label"], spatial_size=(512, 512), mode='nearest')]
+
+    if args.augment:
+              aug_list = [monai.transforms.RandRotate90d(keys=['image', 'label'], prob=0.1),
+                          monai.transforms.RandGibbsNoised(keys=['image'], prob=0.1),
+                          monai.transforms.RandAdjustContrastd(keys=['image'], prob=0.1),
+                          monai.transforms.RandZoomd(keys=['image', 'label'], prob=0.1, min_zoom=0.8, max_zoom=1.2)
+                          ]
+              transform_list = transform_list + aug_list
+
+    transform_list.append(monai.transforms.ToTensord(keys=["image", "label"]))
     transforms = monai.transforms.Compose(transform_list)
 
     train_dataset = monai.data.Dataset(train_data, transform=transforms)
@@ -164,6 +172,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--val_every_n_epochs', type=int, default=10)
     parser.add_argument('--wandb_logging', action='store_true')
+    parser.add_argument('--augment', action='store_true')
     args = parser.parse_args()
 
     main(args)
