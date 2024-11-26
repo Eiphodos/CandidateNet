@@ -123,3 +123,11 @@ def convert_scale_to_coords_in_full_res(one_dim_coords, patch_size, im_size):
     return torch.cat(new_coords_all, dim=0).long()
 
 
+def create_oracle_labels(labels, patch_size): 
+    max = F.max_pool2d(labels.float(), patch_size, stride=patch_size).to(torch.int32)
+    min = F.max_pool2d(-labels.float(), patch_size, stride=patch_size).to(torch.int32)
+    one_class = (max == -min)
+    
+    patch_groups_per_img = one_class.to(torch.uint8)
+    
+    return patch_groups_per_img.to(torch.uint8).squeeze(0)

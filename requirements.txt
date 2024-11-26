@@ -1,0 +1,6 @@
+torch==2.5.1
+torchvision==0.20.1
+einops==0.8.0
+monai==1.4.0
+wandb
+tqdm
