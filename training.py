@@ -141,7 +141,7 @@ def main(args):
                 iou_scores_val, iou_not_nans_val = iou_metric_val.aggregate()
                 print("Validation - Dice score: {:.4f}, IoU score: {:.4f}".format(dice_scores_val.item(), iou_scores_val.item()))
                 if wandb.run is not None:
-                    wandb.log({"val/epoch": e, 'validate/dice': dice_scores.item(), 'validate/iou': iou_scores.item()}, step=e)
+                    wandb.log({"validate/epoch": e, 'validate/dice': dice_scores.item(), 'validate/iou': iou_scores.item()}, step=e)
 
 
 
