@@ -4,6 +4,7 @@ https://github.com/rwightman/pytorch-image-models
 """
 
 import torch
+import math
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -23,7 +24,6 @@ class SegmentationTransformer(nn.Module):
         n_layers,
         d_model,
         d_encoder,
-        d_ff,
         n_heads,
         dropout=0.0,
         drop_path_rate=0.0,
@@ -37,18 +37,17 @@ class SegmentationTransformer(nn.Module):
         self.n_layers = n_layers
         self.d_model = d_model
         self.d_encoder = d_encoder
-        self.d_ff = d_ff
         self.n_heads = n_heads
         self.dropout = nn.Dropout(dropout)
         self.split_ratio = split_ratio
         self.n_cls = n_cls
         self.scale = d_model ** -0.5
-        self.internal_dim = d_encoder
+        self.internal_dim = d_model
 
         # transformer blocks
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, n_layers)]
         self.blocks = nn.ModuleList(
-            [Block(d_model, n_heads, d_ff, dropout, dpr[i]) for i in range(n_layers)]
+            [Block(d_model, n_heads, d_model*4, dropout, dpr[i]) for i in range(n_layers)]
         )
 
         self.cls_emb = nn.Parameter(torch.randn(1, self.internal_dim, d_model))
@@ -63,9 +62,20 @@ class SegmentationTransformer(nn.Module):
 
         minimum_resolution = image_size[0] // (patch_size // 2**(n_scales-1))
         upsampling_ratio = image_size[0] // minimum_resolution
-        self.conv_up_proj = nn.ConvTranspose2d(self.internal_dim, self.internal_dim, kernel_size=upsampling_ratio, stride=upsampling_ratio)
-        self.out_norm = nn.InstanceNorm2d(self.internal_dim)
+        up_proj = []
+        for i in range(int(math.log(upsampling_ratio, 2))):
+            up_proj.append(nn.Conv2d(self.internal_dim, self.internal_dim, kernel_size=3, stride=1, padding=1))
+            up_proj.append(nn.InstanceNorm2d(self.internal_dim))
+            up_proj.append(nn.LeakyReLU())
+            up_proj.append(nn.ConvTranspose2d(self.internal_dim, self.internal_dim, kernel_size=2, stride=2))
+            up_proj.append(nn.InstanceNorm2d(self.internal_dim))
+            up_proj.append(nn.LeakyReLU())
+        self.conv_up_proj = nn.ModuleList(up_proj)
+
         self.conv_out_proj = nn.Conv2d(self.internal_dim, self.n_cls, kernel_size=3, stride=1, padding=1)
+
+        self.n_patches = minimum_resolution ** 2
+        self.pos_embed =nn.Sequential(nn.Linear(2, d_model), nn.ReLU(), nn.Linear(d_model, d_model))
 
         self.apply(init_weights)
         nn.init.trunc_normal_(self.cls_emb, std=0.02)
@@ -81,6 +91,7 @@ class SegmentationTransformer(nn.Module):
         GS = H // self.patch_size
 
         x = self.proj_dec(x)
+        x = x + self.pos_embed(patch_code.float())
         cls_emb = self.cls_emb.expand(x.size(0), -1, -1)
         x = torch.cat((x, cls_emb), 1)
         for blk in self.blocks:
@@ -112,9 +123,11 @@ class SegmentationTransformer(nn.Module):
 
         masks = patches_to_images(masks, patch_code_org, (new_GS, new_GS))
         #masks = F.interpolate(masks, size=(H, W), mode="bilinear", align_corners=False)
-        masks = self.conv_up_proj(masks)
-        masks = self.out_norm(masks)
-        masks = F.leaky_relu(masks)
+        #masks = self.conv_up_proj(masks)
+        #masks = self.out_norm(masks)
+        #masks = F.leaky_relu(masks)
+        for cup in self.conv_up_proj:
+            masks = cup(masks)
         masks = self.conv_out_proj(masks)
 
         return masks

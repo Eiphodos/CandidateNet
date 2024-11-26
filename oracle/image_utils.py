@@ -109,7 +109,7 @@ def get_1d_coords_scale_from_h_w_ps(height, width, patch_size, scale):
 
     scale_lvl = torch.tensor([[scale]] * n_patches)
     patches_scale_coords = torch.cat([scale_lvl, patches_coords], dim=1)
-    return patches_scale_coords
+    return patches_scale_coords.int()
 
 def convert_scale_to_coords_in_full_res(one_dim_coords, patch_size, im_size):
     patch_size_2d = im_size // patch_size

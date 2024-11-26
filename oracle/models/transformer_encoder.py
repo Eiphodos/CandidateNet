@@ -50,12 +50,13 @@ class TransformerLayer(nn.Module):
         # transformer blocks
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, n_blocks)]
         self.blocks = nn.ModuleList(
-            [Block(dim, n_heads, dim_ff, dropout, dpr) for i in range(n_blocks)]
+            [Block(dim, n_heads, dim_ff, dropout, dpr[i]) for i in range(n_blocks)]
         )
 
     def forward(self, x):
         for blk_idx in range(len(self.blocks)):
             x = self.blocks[blk_idx](x)
+        return x
 
 
 class VisionTransformer(nn.Module):
@@ -65,7 +66,6 @@ class VisionTransformer(nn.Module):
         patch_size,
         n_layers,
         d_model,
-        d_ff,
         n_heads,
         dropout=0.0,
         drop_path_rate=0.0,
@@ -77,21 +77,21 @@ class VisionTransformer(nn.Module):
         self.patch_embed = PatchEmbedding(
             image_size,
             patch_size,
-            d_model,
+            d_model[0],
             channels,
         )
         self.image_size = image_size
         self.patch_size = patch_size
         self.n_layers = n_layers
         self.d_model = d_model
-        self.d_ff = d_ff
         self.n_heads = n_heads
         self.dropout = nn.Dropout(dropout)
         self.split_ratio = split_ratio
         self.n_scales = n_scales
         # Pos Embs
-        self.pos_embed = nn.Parameter(torch.randn(1, self.patch_embed.num_patches, d_model))
-        self.rel_pos_embs = nn.ParameterList([nn.Parameter(torch.randn(1, self.split_ratio, d_model[i + 1])) for i in range(n_scales - 1)])
+        self.pos_embed = nn.Parameter(torch.randn(1, self.patch_embed.num_patches, d_model[0]))
+        self.rel_pos_embs = nn.ParameterList([nn.Parameter(torch.randn(1, self.split_ratio, d_model[i])) for i in range(n_scales - 1)])
+        self.scale_embs = nn.ParameterList([nn.Parameter(torch.randn(1, 1, d_model[i])) for i in range(n_scales - 1)])
 
 
         # transformer layers
@@ -99,9 +99,12 @@ class VisionTransformer(nn.Module):
             [TransformerLayer(n_layers[i], d_model[i], n_heads[i], d_model[i]*4, dropout, drop_path_rate) for i in range(len(n_layers))]
         )
 
+        # Downsamplers
+        self.downsamplers = nn.ModuleList([nn.Linear(d_model[i], d_model[i + 1]) for i in range(len(n_layers) - 1)])
+
         # Split layers
         self.splits = nn.ModuleList(
-            [nn.Linear(d_model, d_model * self.split_ratio) for i in range(n_layers)]
+            [nn.Linear(d_model[i], d_model[i] * self.split_ratio) for i in range(len(n_layers))]
         )
 
 
@@ -142,7 +145,7 @@ class VisionTransformer(nn.Module):
     def split_tokens(self, tokens_to_split, curr_scale):
         x_splitted = self.splits[curr_scale](tokens_to_split)
         x_splitted = rearrange(x_splitted, 'b n (s d) -> b n s d', s=self.split_ratio)
-        x_splitted = x_splitted + self.rel_pos_embs[curr_scale - 1]
+        x_splitted = x_splitted + self.rel_pos_embs[curr_scale] + self.scale_embs[curr_scale]
         x_splitted = rearrange(x_splitted, 'b n s d -> b (n s) d', s=self.split_ratio)
         return x_splitted
 
@@ -157,9 +160,9 @@ class VisionTransformer(nn.Module):
 
         new_coords_2dim = torch.stack([a, b, c, d]).permute(2, 0, 1)
         new_coords_2dim = rearrange(new_coords_2dim, 'n s c -> (n s) c', s=self.split_ratio, c=2)
-        new_coords_1dim = convert_2d_index_to_1d(new_coords_2dim, patch_size * 2).unsqueeze(1).long()
+        new_coords_1dim = convert_2d_index_to_1d(new_coords_2dim, patch_size * 2).unsqueeze(1).int()
 
-        scale_lvl = torch.tensor([[new_scale]] * new_coords_1dim.shape[0]).to('cuda').long()
+        scale_lvl = torch.tensor([[new_scale]] * new_coords_1dim.shape[0]).to('cuda').int()
         patches_scale_coords = torch.cat([scale_lvl, new_coords_1dim], dim=1)
 
         return patches_scale_coords
@@ -186,8 +189,8 @@ class VisionTransformer(nn.Module):
 
         patches_scale_coords = get_1d_coords_scale_from_h_w_ps(H, W, PS, 0).to('cuda')
 
-        for blk_idx in range(len(self.blocks)):
-            x = self.blocks[blk_idx](x)
+        for l_idx in range(len(self.layers)):
+            x = self.layers[l_idx](x)
             #print("Current total number of tokens in layer {}: {}".format(blk_idx, x.shape[1]))
             '''
             for s in range(blk_idx + 1):
@@ -195,10 +198,11 @@ class VisionTransformer(nn.Module):
                 coords_at_scale = patches_scale_coords[indx_scale]
                 print("Current number of tokens at scale {} in layer {}: {}".format(s, blk_idx, len(coords_at_scale)))
             '''
-            if blk_idx < self.n_scales - 1: 
-                ol =  oracle_labels[blk_idx]
-                x, patches_scale_coords = self.split_input(x, ol, patches_scale_coords, blk_idx, patched_im_size)
+            if l_idx < self.n_scales - 1: 
+                ol =  oracle_labels[l_idx]
+                x, patches_scale_coords = self.split_input(x, ol, patches_scale_coords, l_idx, patched_im_size)
                 PS /= 2
                 patched_im_size *= 2
+                x = self.downsamplers[l_idx](x)
 
         return x, patches_scale_coords
