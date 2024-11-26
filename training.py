@@ -10,6 +10,9 @@ from data.utils import kvasir_data_to_dict
 from utils import count_parameters
 
 def main(args):
+    for arg in vars(args):
+        print("{} : {}".format(arg, getattr(args, arg)))
+
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
     ### LOGGING ###
@@ -86,6 +89,7 @@ def main(args):
     iou_metric_val = monai.metrics.MeanIoU(include_background=True, reduction="mean", get_not_nans=True)
 
     ### TRAINING LOOP ###
+    print("Starting training...")
     for e in range(args.epochs):
         epoch_start = time.time()
         for i, batch in enumerate(data_loader_train):

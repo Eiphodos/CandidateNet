@@ -32,7 +32,7 @@ def patches_to_images(patches, policy_code, grid_size):
         scale_idx = scale_value == scale
         # transform 1*1 original grid coord to 2*2 (because it will be upsampled by the factor of 2)
         grid_coord = grid_coords[scale_idx].unsqueeze(1)  # coords are stacked across batch dim
-        new_coords = torch.stack(torch.meshgrid(torch.arange(0, 2**inv_scale), torch.arange(0, 2**inv_scale))).view(2,-1).permute(1,0).cuda()
+        new_coords = torch.stack(torch.meshgrid(torch.arange(0, 2**inv_scale), torch.arange(0, 2**inv_scale), indexing='ij')).view(2,-1).permute(1,0).cuda()
         #new_coords = [grid_coord + nc for nc in new_coords]
         #grid_coord = torch.cat(new_coords, dim=1)
         grid_coord = grid_coord + new_coords
@@ -117,7 +117,7 @@ def convert_scale_to_coords_in_full_res(one_dim_coords, patch_size, im_size):
     for coord in one_dim_coords:
         x_values = torch.arange((coord // patch_size_2d)*patch_size, (coord // patch_size_2d)*patch_size + patch_size)
         y_values = torch.arange((coord % patch_size_2d)*patch_size, (coord % patch_size_2d)*patch_size + patch_size)
-        new_coords = torch.stack(torch.meshgrid(x_values, y_values)).permute(1,2,0).view(-1, 2)
+        new_coords = torch.stack(torch.meshgrid(x_values, y_values, indexing='ij')).permute(1,2,0).view(-1, 2)
         new_coords_one_dim = convert_2d_index_to_1d(new_coords, im_size)
         new_coords_all.append(new_coords_one_dim)
     return torch.cat(new_coords_all, dim=0).long()
