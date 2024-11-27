@@ -6,7 +6,7 @@ import torch.nn as nn
 class PolicyNet(nn.Module):
     def __init__(self):
         super().__init__()
-        self.backbone = timm.create_model('efficientnet_lite0', pretrained=True, features_only=True, in_chans=1)
+        self.backbone = timm.create_model('efficientnet_lite0', pretrained=True, features_only=True, in_chans=3)
         self.head = nn.Conv2d(320, 2, 1)
 
     @torch.jit.ignore
@@ -25,7 +25,7 @@ class PolicyNetTrain(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.backbone = timm.create_model('efficientnet_lite0', pretrained=True, features_only=True, in_chans=1)
+        self.backbone = timm.create_model('efficientnet_lite0', pretrained=True, features_only=True, in_chans=3)
         self.head = nn.Conv2d(320, 2, 1)
         self.criterion = nn.CrossEntropyLoss(ignore_index=255)
 

@@ -53,7 +53,7 @@ class VisionTransformer(nn.Module):
         dropout=0.1,
         drop_path_rate=0.0,
         distilled=False,
-        channels=1,
+        channels=3,
         policynet_ckpt=None,
     ):
         super().__init__()
