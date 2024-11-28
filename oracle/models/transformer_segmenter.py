@@ -3,6 +3,7 @@ import torch.nn as nn
 
 from oracle.models.transformer_encoder import VisionTransformer
 from oracle.models.transformer_decoder import SegmentationTransformer
+from oracle.models.transformer_decoder import SimpleMaskDecoder
 
 
 class MultiResSegmenter(nn.Module):
@@ -18,7 +19,8 @@ class MultiResSegmenter(nn.Module):
         n_heads_decoder=4,
         n_cls=3,
         split_ratio=4,
-        n_scales=2) -> None:
+        n_scales=2,
+        decoder_type='advanced') -> None:
         super().__init__()
 
         self.encoder = VisionTransformer(image_size=image_size,
@@ -30,16 +32,26 @@ class MultiResSegmenter(nn.Module):
                     split_ratio=split_ratio,
                     n_scales=n_scales)
 
-        self.decoder = SegmentationTransformer(image_size=image_size,
-                          patch_size=patch_size,
-                          n_layers=n_layers_decoder,
-                          d_model=d_decoder,
-                          d_encoder=d_encoder[-1],
-                          n_heads=n_heads_decoder,
-                          n_cls=n_cls,
-                          split_ratio=split_ratio,
-                          n_scales=n_scales)
-        
+        if decoder_type == 'advanced':
+            self.decoder = SegmentationTransformer(image_size=image_size,
+                            patch_size=patch_size,
+                            n_layers=n_layers_decoder,
+                            d_model=d_decoder,
+                            d_encoder=d_encoder[-1],
+                            n_heads=n_heads_decoder,
+                            n_cls=n_cls,
+                            split_ratio=split_ratio,
+                            n_scales=n_scales)
+        elif decoder_type == 'simple':
+            self.decoder = SimpleMaskDecoder(image_size=image_size,
+                    patch_size=patch_size,
+                    n_layers=n_layers_decoder,
+                    d_model=d_decoder,
+                    d_encoder=d_encoder[-1],
+                    n_heads=n_heads_decoder,
+                    n_cls=n_cls,
+                    split_ratio=split_ratio,
+                    n_scales=n_scales)
 
     def forward(self, im, oracle_labels):
         enc_out, patches_scale_coords = self.encoder(im, oracle_labels)

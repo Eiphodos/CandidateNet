@@ -81,7 +81,8 @@ def main(args):
                           d_decoder=args.d_decoder,
                           n_heads_decoder=args.n_heads_decoder,
                           n_scales=len(args.patch_sizes),
-                          n_cls=2)
+                          n_cls=2,
+                          decoder_type=args.decoder_type)
 
     model = model.to(device)
     print(model)
@@ -169,6 +170,7 @@ if __name__ == '__main__':
     parser.add_argument('--d_encoder', type=int, nargs='*', default=[256, 128, 128, 128, 128])
     parser.add_argument('--n_heads_encoder', type=int, nargs='*', default=[16, 8, 8, 8, 8])
     parser.add_argument('--n_encoder_layers', type=int, nargs='*', default=[1, 1, 1, 1, 4])
+    parser.add_argument('--decoder_type', type=str, default='advanced')
     parser.add_argument('--d_decoder', type=int, default=128)
     parser.add_argument('--n_decoder_layers', type=int, default=4)
     parser.add_argument('--n_heads_decoder', type=int, default=4)
