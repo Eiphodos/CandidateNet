@@ -4,8 +4,8 @@ import time
 import wandb
 from argparse import ArgumentParser
 
-from oracle.models.transformer_segmenter import MultiResSegmenter
-from oracle.image_utils import create_oracle_labels
+from segm.model.factory import create_segmenter
+from segm.model.policy_net import PolicyNetTrain
 from data.utils import kvasir_data_to_dict
 from utils import count_parameters
 
@@ -63,7 +63,7 @@ def main(args):
 
     data_loader_train = monai.data.DataLoader(
         train_dataset,
-        batch_size=1,
+        batch_size=8,
         num_workers=8,
         pin_memory=True,
         drop_last=True,
@@ -71,23 +71,41 @@ def main(args):
         )
     
     ### MODEL ###
-    model = MultiResSegmenter(image_size=(args.image_size, args.image_size),
-                          patch_size=args.patch_sizes[0],
-                          channels=3,
-                          n_layers_encoder=args.n_encoder_layers,
-                          d_encoder=args.d_encoder,
-                          n_heads_encoder=args.n_heads_encoder,
-                          n_layers_decoder=args.n_decoder_layers,
-                          d_decoder=args.d_decoder,
-                          n_heads_decoder=args.n_heads_decoder,
-                          n_scales=len(args.patch_sizes),
-                          n_cls=2)
-
-    model = model.to(device)
+    model_cfg = {}
+    model_cfg["image_size"] = (args.image_size, args.image_size)
+    model_cfg["patch_size"] = args.patch_size
+    model_cfg["d_model"] = args.d_encoder
+    model_cfg["n_heads"] = args.n_heads_encoder
+    model_cfg["n_layers"] = args.n_encoder_layers
+    model_cfg["normalization"] = 'vit'
+    model_cfg["distilled"] = False
+    model_cfg["backbone"] = 'custom'
+    model_cfg["dropout"] = 0.0
+    model_cfg["drop_path_rate"] = 0.0
+    model_cfg["n_cls"] = 2
+    model_cfg["policy_method"] = args.policy_method # 'policy_net'  | 'no_sharing'
+    #model_cfg["policy_schedule"] = (1024, 0)
+    #model_cfg["policy_schedule"] = (512, 128)
+    #model_cfg["policy_schedule"] = (128, 224)
+    #model_cfg["policy_schedule"] = (64, 240)
+    #model_cfg["policy_schedule"] = (512, 896)
+    model_cfg["policy_schedule"] = args.policy_schedule
+    model_cfg["policynet_ckpt"] = args.policynet_ckpt # 'policy_net_kvasir_150.pth'
+    decoder_cfg = {}
+    decoder_cfg["drop_path_rate"] = 0.0
+    decoder_cfg["dropout"] = 0.0
+    decoder_cfg["n_layers"] = args.n_decoder_layers
+    decoder_cfg["name"] = 'mask_transformer'
+    model_cfg["decoder"] = decoder_cfg 
+    
+    model = create_segmenter(model_cfg)
+    model.to(device)
     print(model)
     print("Total parameters: {}".format(count_parameters(model)))
     print("Encoder parameters: {}".format(count_parameters(model.encoder)))
     print("Decoder parameters: {}".format(count_parameters(model.decoder)))
+    if model_cfg["policy_method"] == 'policy_net':
+        print("Policy net parameters: {}".format(count_parameters(model.policy_net)))
 
     ### OPTIMIZER/CRITERION ###
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.wd)
@@ -111,18 +129,11 @@ def main(args):
             inputs, labels = (batch["image"], batch["label"])
             inputs = inputs.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
-            oracle_labels_multires = []
-            for ps in args.patch_sizes:
-                ol = create_oracle_labels(labels, ps)
-                oracle_labels_multires.append(ol.squeeze())
-            outputs, _, _ = model(inputs, oracle_labels_multires)
+            outputs, _, _, _ = model(inputs)
             loss = criterion(outputs, labels)
-            loss = loss / args.grad_accum_steps
             loss.backward()
-
-            if (i + 1) % args.grad_accum_steps == 0:
-                optimizer.step()
-                optimizer.zero_grad()
+            optimizer.step()
+            optimizer.zero_grad()
 
             labels_convert = [post_label(labels[0])]
             output_convert = [post_pred(outputs[0])]
@@ -142,11 +153,7 @@ def main(args):
                     inputs, labels = (batch["image"], batch["label"])
                     inputs = inputs.to(device, non_blocking=True)
                     labels = labels.to(device, non_blocking=True)
-                    oracle_labels_multires = []
-                    for ps in args.patch_sizes:
-                        ol = create_oracle_labels(labels, ps)
-                        oracle_labels_multires.append(ol.squeeze())
-                    outputs, _, _ = model(inputs, oracle_labels_multires)
+                    outputs, _, _, _ = model(inputs)
                     labels_convert = [post_label(labels[0])]
                     output_convert = [post_pred(outputs[0])]
                     dice_metric_val(y_pred=output_convert, y=labels_convert)
@@ -165,14 +172,14 @@ if __name__ == '__main__':
     parser.add_argument('--train_data_folder', type=str)
     parser.add_argument('--val_data_folder', type=str)
     parser.add_argument('--test_data_folder', type=str)
-    parser.add_argument('--patch_sizes', type=int, nargs='*', default=[64, 32, 16, 8, 4])
-    parser.add_argument('--d_encoder', type=int, nargs='*', default=[256, 128, 128, 128, 128])
-    parser.add_argument('--n_heads_encoder', type=int, nargs='*', default=[16, 8, 8, 8, 8])
-    parser.add_argument('--n_encoder_layers', type=int, nargs='*', default=[1, 1, 1, 1, 4])
-    parser.add_argument('--d_decoder', type=int, default=128)
+    parser.add_argument('--patch_size', type=int, default=16)
+    parser.add_argument('--d_encoder', type=int, default=256)
+    parser.add_argument('--n_heads_encoder', type=int, default=16)
+    parser.add_argument('--n_encoder_layers', type=int, default=8)
     parser.add_argument('--n_decoder_layers', type=int, default=4)
-    parser.add_argument('--n_heads_decoder', type=int, default=4)
-    parser.add_argument('--grad_accum_steps', type=int, default=8)
+    parser.add_argument('--policy_schedule', type=int, nargs='*', default=[512, 128])
+    parser.add_argument('--policy_method', type=str, default='policy_net')
+    parser.add_argument('--policynet_ckpt', type=str, default='policy_net_kvasir_150.pth')
     parser.add_argument('--image_size', type=int, default=512)
     parser.add_argument('--epochs', type=int, default=500)
     parser.add_argument('--lr', type=float, default=1e-4)
