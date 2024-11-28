@@ -49,9 +49,7 @@ class MultiResSegmenter(nn.Module):
                     d_model=d_decoder,
                     d_encoder=d_encoder[-1],
                     n_heads=n_heads_decoder,
-                    n_cls=n_cls,
-                    split_ratio=split_ratio,
-                    n_scales=n_scales)
+                    n_cls=n_cls)
 
     def forward(self, im, oracle_labels):
         enc_out, patches_scale_coords = self.encoder(im, oracle_labels)
