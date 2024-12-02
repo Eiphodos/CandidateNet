@@ -2,10 +2,10 @@ import os
 import random
 import hostlist
 from pathlib import Path
-import torch
+import segm.utils.ptu as ptu
 import torch.distributed as dist
 
-import segm.utils.torch as ptu
+import segm.utils.ptu as ptu
 
 
 def init_process(backend="gloo"):
@@ -59,10 +59,10 @@ def sync_model(sync_dir, model):
     # https://github.com/ylabbe/cosypose/blob/master/cosypose/utils/distributed.py
     sync_path = Path(sync_dir).resolve() / "sync_model.pkl"
     if ptu.dist_rank == 0 and ptu.world_size > 1:
-        torch.save(model.state_dict(), sync_path)
+        ptu.save(model.state_dict(), sync_path)
     dist.barrier()
     if ptu.dist_rank > 0:
-        model.load_state_dict(torch.load(sync_path))
+        model.load_state_dict(ptu.load(sync_path))
     dist.barrier()
     if ptu.dist_rank == 0 and ptu.world_size > 1:
         sync_path.unlink()

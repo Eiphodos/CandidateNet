@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-import segm.utils.torch as ptu
+import segm.utils.ptu as ptu
 
 
 def init_weights(m):

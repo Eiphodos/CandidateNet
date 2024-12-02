@@ -8,9 +8,8 @@ import torch.nn as nn
 
 from segm.model.utils import init_weights, resize_pos_embed
 from segm.model.blocks import Block
+from segm.model.blocks import DropPath
 
-from timm.models.layers import DropPath
-from timm.models.layers import trunc_normal_
 from timm.models.vision_transformer import _load_weights
 
 
@@ -99,10 +98,10 @@ class VisionTransformer(nn.Module):
         self.norm = nn.LayerNorm(d_model)
         self.head = nn.Linear(d_model, n_cls)
 
-        trunc_normal_(self.pos_embed, std=0.02)
-        trunc_normal_(self.cls_token, std=0.02)
+        nn.init.trunc_normal_(self.pos_embed, std=0.02)
+        nn.init.trunc_normal_(self.cls_token, std=0.02)
         if self.distilled:
-            trunc_normal_(self.dist_token, std=0.02)
+            nn.init.trunc_normal_(self.dist_token, std=0.02)
         self.pre_logits = nn.Identity()
 
         self.apply(init_weights)

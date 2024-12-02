@@ -1,5 +1,5 @@
 import os
-import torch
+import segm.utils.ptu as ptu
 
 
 """
@@ -28,5 +28,5 @@ def set_gpu_mode(mode):
 
     distributed = world_size > 1
     use_gpu = mode
-    device = torch.device(f"cuda:{gpu_id}" if use_gpu else "cpu")
-    torch.backends.cudnn.benchmark = True
+    device = ptu.device(f"cuda:{gpu_id}" if use_gpu else "cpu")
+    ptu.backends.cudnn.benchmark = True

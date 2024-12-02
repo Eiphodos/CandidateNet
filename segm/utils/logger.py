@@ -8,10 +8,10 @@ import time
 from collections import defaultdict, deque
 import datetime
 
-import torch
+import segm.utils.ptu as ptu
 import torch.distributed as dist
 
-import segm.utils.torch as ptu
+import segm.utils.ptu as ptu
 
 
 class SmoothedValue(object):
@@ -38,8 +38,8 @@ class SmoothedValue(object):
         """
         if not is_dist_avail_and_initialized():
             return
-        t = torch.tensor(
-            [self.count, self.total], dtype=torch.float64, device=ptu.device
+        t = ptu.tensor(
+            [self.count, self.total], dtype=ptu.float64, device=ptu.device
         )
         dist.barrier()
         dist.all_reduce(t)
@@ -49,12 +49,12 @@ class SmoothedValue(object):
 
     @property
     def median(self):
-        d = torch.tensor(list(self.deque))
+        d = ptu.tensor(list(self.deque))
         return d.median().item()
 
     @property
     def avg(self):
-        d = torch.tensor(list(self.deque), dtype=torch.float32)
+        d = ptu.tensor(list(self.deque), dtype=ptu.float32)
         return d.mean().item()
 
     @property
@@ -86,7 +86,7 @@ class MetricLogger(object):
 
     def update(self, n=1, **kwargs):
         for k, v in kwargs.items():
-            if isinstance(v, torch.Tensor):
+            if isinstance(v, ptu.Tensor):
                 v = v.item()
             assert isinstance(v, (float, int))
             self.meters[k].update(v, n)
@@ -130,7 +130,7 @@ class MetricLogger(object):
             "time: {time}",
             "data: {data}",
         ]
-        if torch.cuda.is_available():
+        if ptu.cuda.is_available():
             log_msg.append("max mem: {memory:.0f}")
         log_msg = self.delimiter.join(log_msg)
         MB = 1024.0 * 1024.0
@@ -141,7 +141,7 @@ class MetricLogger(object):
             if i % print_freq == 0 or i == len(iterable) - 1:
                 eta_seconds = iter_time.global_avg * (len(iterable) - i)
                 eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
-                if torch.cuda.is_available():
+                if ptu.cuda.is_available():
                     print(
                         log_msg.format(
                             i,
@@ -150,7 +150,7 @@ class MetricLogger(object):
                             meters=str(self),
                             time=str(iter_time),
                             data=str(data_time),
-                            memory=torch.cuda.max_memory_allocated() / MB,
+                            memory=ptu.cuda.max_memory_allocated() / MB,
                         ),
                         flush=True,
                     )

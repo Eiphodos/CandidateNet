@@ -14,7 +14,7 @@ from segm.model.utils import checkpoint_filter_fn_deit
 from segm.model.decoder import DecoderLinear
 from segm.model.decoder import MaskTransformer
 from segm.model.segmenter import Segmenter
-import segm.utils.torch as ptu
+import segm.utils.ptu as ptu
 
 
 @register_model
