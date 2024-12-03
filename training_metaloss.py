@@ -126,7 +126,7 @@ def main(args):
                 meta_loss = meta_loss * args.meta_beta
                 loss = loss + meta_loss
             else:
-                meta_loss = 0
+                meta_loss = torch.tensor([0])
             loss = loss / args.grad_accum_steps
             loss.backward()
 
