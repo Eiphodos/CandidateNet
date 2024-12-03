@@ -109,9 +109,7 @@ class VisionTransformer(nn.Module):
 
         # Metaloss predictions
         self.metalosses = nn.ModuleList([nn.Sequential(
-            nn.Linear(d_model[i], d_model[i] * 2),
-            nn.LeakyReLU(),
-            nn.Linear(d_model[i] * 2, d_model[i]),
+            nn.Linear(d_model[i], d_model[i]),
             nn.LeakyReLU(),
             nn.Linear(d_model[i], 1)) for i in range(len(n_layers))])
 
