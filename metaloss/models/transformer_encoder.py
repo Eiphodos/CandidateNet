@@ -6,10 +6,10 @@ https://github.com/rwightman/pytorch-image-models
 import torch
 import torch.nn as nn
 
-from oracle.models.utils import init_weights
-from oracle.models.blocks import Block, DropPath
+from metaloss.models.utils import init_weights
+from metaloss.models.blocks import Block, DropPath
 
-from oracle.image_utils import get_1d_coords_scale_from_h_w_ps, convert_1d_index_to_2d, convert_2d_index_to_1d
+from metaloss.image_utils import get_1d_coords_scale_from_h_w_ps, convert_1d_index_to_2d, convert_2d_index_to_1d
 
 from einops import rearrange
 
@@ -127,17 +127,22 @@ class VisionTransformer(nn.Module):
     def load_pretrained(self, checkpoint_path, prefix=""):
         _load_weights(self, checkpoint_path, prefix)
 
-    def predict_splits(self, tokens_at_curr_scale, patches_scale_coords_curr_scale, curr_scale):
+    def divide_tokens_to_split_and_keep(self, tokens_at_curr_scale, patches_scale_coords_curr_scale, curr_scale):
         k_keep = tokens_at_curr_scale.shape[1] // 2
         k_split = tokens_at_curr_scale.shape[1] - k_keep
-        pred_meta_loss = self.metalosses[curr_scale](tokens_at_curr_scale)
-        tkv, tki = torch.topk(pred_meta_loss, k=k_split, dim=2, sorted=False)
-        bkv, bki = torch.topk(pred_meta_loss, k=k_keep, dim=2, sorted=False, largest=False)
+        pred_meta_loss = self.metalosses[curr_scale](tokens_at_curr_scale).squeeze(2)
+        tkv, tki = torch.topk(pred_meta_loss, k=k_split, dim=1, sorted=False)
+        bkv, bki = torch.topk(pred_meta_loss, k=k_keep, dim=1, sorted=False, largest=False)
 
-        tokens_to_keep = tokens_at_curr_scale[:, tki, :]
-        tokens_to_split = tokens_at_curr_scale[:, choices_for_scale == 0, :]
-        coords_to_keep = patches_scale_coords_curr_scale[choices_for_scale == 1]
-        coords_to_split = patches_scale_coords_curr_scale[choices_for_scale == 0]
+        batch_indices_k = torch.arange(tokens_at_curr_scale.shape[0]).unsqueeze(1).repeat(1, k_keep)
+        batch_indices_s = torch.arange(tokens_at_curr_scale.shape[0]).unsqueeze(1).repeat(1, k_split)
+
+        tokens_to_keep = tokens_at_curr_scale[batch_indices_k, bki]
+        tokens_to_split = tokens_at_curr_scale[batch_indices_s, tki]
+        coords_to_keep = patches_scale_coords_curr_scale[bki].squeeze(0)
+        coords_to_split = patches_scale_coords_curr_scale[tki].squeeze(0)
+
+        return tokens_to_split, coords_to_split, tokens_to_keep, coords_to_keep, pred_meta_loss
 
 
     def divide_tokens_coords_on_scale(self, tokens, patches_scale_coords, curr_scale):
@@ -149,17 +154,7 @@ class VisionTransformer(nn.Module):
         tokens_at_older_scale = tokens[:, indx_old_scales, :]
 
         return tokens_at_curr_scale, coords_at_curr_scale, tokens_at_older_scale, coords_at_older_scales
-
-
-    def divide_tokens_to_split_and_keep(self, tokens_at_curr_scale, patches_scale_coords_curr_scale, split_choices_curr_scale):
-        indx_for_choice = patches_scale_coords_curr_scale[:, 1]
-        choices_for_scale = split_choices_curr_scale[indx_for_choice]
-        tokens_to_keep = tokens_at_curr_scale[:, choices_for_scale == 1, :]
-        tokens_to_split = tokens_at_curr_scale[:, choices_for_scale == 0, :]
-        coords_to_keep = patches_scale_coords_curr_scale[choices_for_scale == 1]
-        coords_to_split = patches_scale_coords_curr_scale[choices_for_scale == 0]
-
-        return tokens_to_split, coords_to_split, tokens_to_keep, coords_to_keep
+    
 
     def split_tokens(self, tokens_to_split, curr_scale):
         x_splitted = self.splits[curr_scale](tokens_to_split)
@@ -187,19 +182,20 @@ class VisionTransformer(nn.Module):
         return patches_scale_coords
          
 
-    def split_input(self, tokens, oracle_labels, patches_scale_coords, curr_scale, patch_size):
+    def split_input(self, tokens, patches_scale_coords, curr_scale, patch_size):
         tokens_at_curr_scale, coords_at_curr_scale, tokens_at_older_scale, coords_at_older_scales = self.divide_tokens_coords_on_scale(tokens, patches_scale_coords, curr_scale)
-        tokens_to_split, coords_to_split, tokens_to_keep, coords_to_keep = self.divide_tokens_to_split_and_keep(tokens_at_curr_scale, coords_at_curr_scale, oracle_labels.view(-1))
+        meta_loss_coords = coords_at_curr_scale[:,1]
+        tokens_to_split, coords_to_split, tokens_to_keep, coords_to_keep, pred_meta_loss = self.divide_tokens_to_split_and_keep(tokens_at_curr_scale, coords_at_curr_scale, curr_scale)
         tokens_after_split = self.split_tokens(tokens_to_split, curr_scale)
         coords_after_split = self.split_coords(coords_to_split, patch_size, curr_scale)
 
         all_tokens = torch.cat([tokens_at_older_scale, tokens_to_keep, tokens_after_split], dim=1)
         all_coords = torch.cat([coords_at_older_scales, coords_to_keep, coords_after_split], dim=0)
 
-        return all_tokens, all_coords
+        return all_tokens, all_coords, pred_meta_loss, meta_loss_coords
 
 
-    def forward(self, im, oracle_labels):
+    def forward(self, im):
         B, _, H, W = im.shape
         PS = self.patch_size
         patched_im_size = H // PS
@@ -207,7 +203,8 @@ class VisionTransformer(nn.Module):
         x = x + self.pos_embed
 
         patches_scale_coords = get_1d_coords_scale_from_h_w_ps(H, W, PS, 0).to('cuda')
-
+        meta_losses = []
+        meta_loss_coords = []
         for l_idx in range(len(self.layers)):
             x = self.layers[l_idx](x)
             #print("Current total number of tokens in layer {}: {}".format(blk_idx, x.shape[1]))
@@ -218,10 +215,11 @@ class VisionTransformer(nn.Module):
                 print("Current number of tokens at scale {} in layer {}: {}".format(s, blk_idx, len(coords_at_scale)))
             '''
             if l_idx < self.n_scales - 1: 
-                ol =  oracle_labels[l_idx]
-                x, patches_scale_coords = self.split_input(x, ol, patches_scale_coords, l_idx, patched_im_size)
+                x, patches_scale_coords, meta_loss, meta_loss_coord = self.split_input(x, patches_scale_coords, l_idx, patched_im_size)
                 PS /= 2
                 patched_im_size *= 2
                 x = self.downsamplers[l_idx](x)
+                meta_losses.append(meta_loss)
+                meta_loss_coords.append(meta_loss_coord)
 
-        return x, patches_scale_coords
+        return x, patches_scale_coords, meta_losses, meta_loss_coords

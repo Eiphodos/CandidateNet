@@ -8,10 +8,10 @@ import math
 import torch.nn as nn
 import torch.nn.functional as F
 
-from oracle.models.utils import init_weights
-from oracle.models.blocks import Block, DropPath
+from metaloss.models.utils import init_weights
+from metaloss.models.blocks import Block, DropPath
 
-from oracle.image_utils import patches_to_images, convert_1d_patched_index_to_2d_org_index
+from metaloss.image_utils import patches_to_images, convert_1d_patched_index_to_2d_org_index
 
 from einops import rearrange
 

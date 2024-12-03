@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 
-from oracle.models.transformer_encoder import VisionTransformer
-from oracle.models.transformer_decoder import SegmentationTransformer
-from oracle.models.transformer_decoder_simple import SimpleMaskDecoder
+from metaloss.models.transformer_encoder import VisionTransformer
+from metaloss.models.transformer_decoder import SegmentationTransformer
+from metaloss.models.transformer_decoder_simple import SimpleMaskDecoder
 
 
 class MultiResSegmenter(nn.Module):
@@ -51,12 +51,12 @@ class MultiResSegmenter(nn.Module):
                     n_heads=n_heads_decoder,
                     n_cls=n_cls)
 
-    def forward(self, im, oracle_labels):
-        enc_out, patches_scale_coords = self.encoder(im, oracle_labels)
+    def forward(self, im):
+        enc_out, patches_scale_coords, meta_losses, meta_loss_coords = self.encoder(im)
         #print(enc_out.shape)
         dec_out = self.decoder(enc_out, patches_scale_coords)
 
-        return dec_out, enc_out, patches_scale_coords
+        return dec_out, enc_out, patches_scale_coords, meta_losses, meta_loss_coords
 
         
 
