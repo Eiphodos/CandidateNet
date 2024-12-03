@@ -125,6 +125,8 @@ def main(args):
                                               args.patch_sizes)
                 meta_loss = meta_loss * args.meta_beta
                 loss = loss + meta_loss
+            else:
+                meta_loss = 0
             loss = loss / args.grad_accum_steps
             loss.backward()
 
