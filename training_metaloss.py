@@ -121,7 +121,7 @@ def main(args):
             dice_ce_loss = dice_loss + ce_loss.mean()
             loss = dice_ce_loss
             if len(meta_losses) > 0:
-                meta_loss = compute_meta_loss(ce_loss, meta_losses, meta_losses_coords, meta_loss_criterion,
+                meta_loss = compute_meta_loss(ce_loss.detach(), meta_losses, meta_losses_coords, meta_loss_criterion,
                                               args.patch_sizes)
                 meta_loss = meta_loss * args.meta_beta
                 loss = loss + meta_loss
