@@ -119,10 +119,12 @@ def main(args):
             dice_loss = dice_loss_criterion(outputs, labels)
             ce_loss = ce_loss_criterion(outputs, labels.squeeze(1).long())
             dice_ce_loss = dice_loss + ce_loss.mean()
-            meta_loss = compute_meta_loss(ce_loss, meta_losses, meta_losses_coords, meta_loss_criterion,
-                                          args.patch_sizes)
-            meta_loss = meta_loss * args.meta_beta
-            loss = dice_ce_loss + meta_loss
+            loss = dice_ce_loss
+            if len(meta_losses > 0):
+                meta_loss = compute_meta_loss(ce_loss, meta_losses, meta_losses_coords, meta_loss_criterion,
+                                              args.patch_sizes)
+                meta_loss = meta_loss * args.meta_beta
+                loss = loss + meta_loss
             loss = loss / args.grad_accum_steps
             loss.backward()
 
