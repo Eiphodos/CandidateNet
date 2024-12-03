@@ -93,8 +93,8 @@ def main(args):
 
     ### OPTIMIZER/CRITERION ###
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.wd)
-    criterion = monai.losses.DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=False)
-    meta_loss_target = nn.CrossEntropyLoss(reduction='none')
+    dice_loss_criterion = monai.losses.DiceLoss(to_onehot_y=True, softmax=True, squared_pred=False)
+    ce_loss_criterion = nn.CrossEntropyLoss(reduction='none')
     meta_loss_criterion = nn.L1Loss()
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
 
@@ -116,9 +116,11 @@ def main(args):
             inputs = inputs.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
             outputs, _, _, meta_losses, meta_losses_coords = model(inputs)
-            dice_ce_loss = criterion(outputs, labels)
-            meta_loss = compute_meta_loss(outputs, labels, meta_losses, meta_losses_coords, meta_loss_target,
-                                          meta_loss_criterion, args.patch_sizes)
+            dice_loss = dice_loss_criterion(outputs, labels)
+            ce_loss = ce_loss_criterion(outputs, labels.squeeze(1).long())
+            dice_ce_loss = dice_loss + ce_loss.mean()
+            meta_loss = compute_meta_loss(ce_loss, meta_losses, meta_losses_coords, meta_loss_criterion,
+                                          args.patch_sizes)
             meta_loss = meta_loss * args.meta_beta
             loss = dice_ce_loss + meta_loss
             loss = loss / args.grad_accum_steps
