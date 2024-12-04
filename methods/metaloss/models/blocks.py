@@ -42,12 +42,12 @@ class DownSampleConvBlock(nn.Module):
         super().__init__()
         self.conv = nn.Conv2d(in_dim, out_dim, kernel_size=3, stride=2, padding=1)
         self.instance_norm = nn.InstanceNorm2d(out_dim, affine=True)
-        self.tanh = nn.Tanh()
+        self.relu = nn.LeakyReLU()
 
     def forward(self, x):
         x = self.conv(x)
-        x = self.tanh(x)
-        x = self.instance_norm(x)
+        x = self.LeakyReLU(x)
+        #x = self.instance_norm(x)
 
         return x
 
