@@ -1,8 +1,8 @@
 import torch.nn as nn
 
-from methods.metaloss.models.transformer_encoder import VisionTransformer
-from methods.metaloss.models.transformer_decoder import SegmentationTransformer
-from methods.metaloss.models.transformer_decoder_simple import SimpleMaskDecoder
+from methods.entropy.models.transformer_encoder import VisionTransformer
+from methods.entropy.models.transformer_decoder import SegmentationTransformer
+from methods.entropy.models.transformer_decoder_simple import SimpleMaskDecoder
 
 
 class MultiResSegmenter(nn.Module):

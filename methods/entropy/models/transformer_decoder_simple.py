@@ -7,10 +7,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from methods.metaloss.models.utils import init_weights
-from methods.metaloss.models.blocks import Block
+from methods.entropy.models.utils import init_weights
+from methods.entropy.models.blocks import Block
 
-from methods.metaloss.image_utils import patches_to_images, convert_1d_patched_index_to_2d_org_index
+from methods.entropy.image_utils import patches_to_images, convert_1d_patched_index_to_2d_org_index
 
 from einops import rearrange
 

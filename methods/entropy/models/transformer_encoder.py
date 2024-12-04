@@ -6,10 +6,10 @@ https://github.com/rwightman/pytorch-image-models
 import torch
 import torch.nn as nn
 
-from methods.metaloss.models.utils import init_weights
-from methods.metaloss.models.blocks import Block
+from methods.entropy.models.utils import init_weights
+from methods.entropy.models.blocks import Block
 
-from methods.metaloss.image_utils import get_1d_coords_scale_from_h_w_ps, convert_1d_index_to_2d, convert_2d_index_to_1d
+from methods.entropy.image_utils import get_1d_coords_scale_from_h_w_ps, convert_1d_index_to_2d, convert_2d_index_to_1d
 
 from einops import rearrange
 
