@@ -6,14 +6,13 @@ https://github.com/rwightman/pytorch-image-models
 import torch
 import torch.nn as nn
 
-from segm.model.utils import init_weights, resize_pos_embed
-from segm.model.blocks import Block
-from segm.model.blocks import DropPath
+from methods.segm.model.utils import init_weights, resize_pos_embed
+from methods.segm.model.blocks import Block
 
 from timm.models.vision_transformer import _load_weights
 
 
-from segm.model.efficient import images_to_patches, policy_indices_by_policynet_pred, policy_indices_no_sharing
+from methods.segm.model.efficient import images_to_patches, policy_indices_by_policynet_pred, policy_indices_no_sharing
 
 
 class PatchEmbedding(nn.Module):

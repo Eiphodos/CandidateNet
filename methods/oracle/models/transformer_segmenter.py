@@ -1,9 +1,8 @@
-import torch
 import torch.nn as nn
 
-from oracle.models.transformer_encoder import VisionTransformer
-from oracle.models.transformer_decoder import SegmentationTransformer
-from oracle.models.transformer_decoder_simple import SimpleMaskDecoder
+from methods.oracle.models.transformer_encoder import VisionTransformer
+from methods.oracle.models.transformer_decoder import SegmentationTransformer
+from methods.oracle.models.transformer_decoder_simple import SimpleMaskDecoder
 
 
 class MultiResSegmenter(nn.Module):

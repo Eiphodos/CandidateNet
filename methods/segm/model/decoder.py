@@ -1,13 +1,11 @@
-import math
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from einops import rearrange
 
-from segm.model.blocks import Block, FeedForward
-from segm.model.utils import init_weights
+from methods.segm.model.blocks import Block
+from methods.segm.model.utils import init_weights
 
-from segm.model.efficient import patches_to_images
+from methods.segm.model.efficient import patches_to_images
 
 class DecoderLinear(nn.Module):
     def __init__(self, n_cls, patch_size, d_encoder):

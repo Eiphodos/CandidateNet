@@ -2,16 +2,13 @@
 https://github.com/facebookresearch/deit/blob/main/utils.py
 """
 
-import io
-import os
 import time
 from collections import defaultdict, deque
 import datetime
 
-import segm.utils.ptu as ptu
 import torch.distributed as dist
 
-import segm.utils.ptu as ptu
+import methods.segm.utils.ptu as ptu
 
 
 class SmoothedValue(object):

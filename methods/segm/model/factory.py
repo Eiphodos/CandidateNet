@@ -1,5 +1,4 @@
 from pathlib import Path
-import timm
 import yaml
 import torch
 import os
@@ -7,14 +6,14 @@ import os
 from timm.models.helpers import load_pretrained, load_custom_pretrained
 from timm.models.vision_transformer import default_cfgs as default_cfgs_vit
 from timm.models.registry import register_model
-from timm.models.vision_transformer import _create_vision_transformer, _cfg, IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+from timm.models.vision_transformer import _create_vision_transformer, IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
-from segm.model.vit import VisionTransformer
-from segm.model.utils import checkpoint_filter_fn_deit
-from segm.model.decoder import DecoderLinear
-from segm.model.decoder import MaskTransformer
-from segm.model.segmenter import Segmenter
-import segm.utils.ptu as ptu
+from methods.segm.model.vit import VisionTransformer
+from methods.segm.model.utils import checkpoint_filter_fn_deit
+from methods.segm.model.decoder import DecoderLinear
+from methods.segm.model.decoder import MaskTransformer
+from methods.segm.model.segmenter import Segmenter
+import methods.segm.utils.ptu as ptu
 
 
 @register_model

@@ -1,5 +1,5 @@
 import os
-import segm.utils.ptu as ptu
+import methods.segm.utils.ptu as ptu
 
 
 """

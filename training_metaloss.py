@@ -5,8 +5,8 @@ import time
 import wandb
 from argparse import ArgumentParser
 
-from metaloss.models.transformer_segmenter import MultiResSegmenter
-from metaloss.losses.metaloss import compute_meta_loss
+from methods.metaloss.models.transformer_segmenter import MultiResSegmenter
+from methods.metaloss.losses.metaloss import compute_meta_loss
 from data.utils import kvasir_data_to_dict
 from utils import count_parameters
 

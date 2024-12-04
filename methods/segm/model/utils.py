@@ -1,10 +1,9 @@
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-import segm.utils.ptu as ptu
+import methods.segm.utils.ptu as ptu
 
 
 def init_weights(m):
@@ -42,7 +41,7 @@ def checkpoint_filter_fn_deit(state_dict, model):
     """ convert patch embedding weight from manual patchify + linear proj to conv"""
     out_dict = {}
     if "model" in state_dict:
-        # For deit models
+        # For deit methods
         state_dict = state_dict["model"]
     num_extra_tokens = 1 + ("dist_token" in state_dict.keys())
     patch_size = model.patch_size

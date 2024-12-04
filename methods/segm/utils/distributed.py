@@ -2,10 +2,9 @@ import os
 import random
 import hostlist
 from pathlib import Path
-import segm.utils.ptu as ptu
 import torch.distributed as dist
 
-import segm.utils.ptu as ptu
+import methods.segm.utils.ptu as ptu
 
 
 def init_process(backend="gloo"):

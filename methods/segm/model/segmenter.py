@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from segm.model.utils import padding, unpadding
-from segm.model.policy_net import PolicyNet
+from methods.segm.model.utils import padding, unpadding
+from methods.segm.model.policy_net import PolicyNet
 
 
 class Segmenter(nn.Module):

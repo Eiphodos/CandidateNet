@@ -4,8 +4,7 @@ import time
 import wandb
 from argparse import ArgumentParser
 
-from segm.model.factory import create_segmenter
-from segm.model.policy_net import PolicyNetTrain
+from methods.segm import create_segmenter
 from data.utils import kvasir_data_to_dict
 from utils import count_parameters
 

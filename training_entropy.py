@@ -1,11 +1,11 @@
 import torch
+import torch.nn as nn
 import monai
 import time
 import wandb
 from argparse import ArgumentParser
 
-from methods.oracle.models.transformer_segmenter import MultiResSegmenter
-from methods.oracle.image_utils import create_oracle_labels
+from methods.entropy.models.transformer_segmenter import MultiResSegmenter
 from data.utils import kvasir_data_to_dict
 from utils import count_parameters
 
@@ -92,7 +92,8 @@ def main(args):
 
     ### OPTIMIZER/CRITERION ###
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.wd)
-    criterion = monai.losses.DiceCELoss(to_onehot_y=True, softmax=True, squared_pred=False)
+    dice_loss_criterion = monai.losses.DiceLoss(to_onehot_y=True, softmax=True, squared_pred=False)
+    ce_loss_criterion = nn.CrossEntropyLoss(reduction='none')
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
 
     ### METRICS ###
@@ -112,12 +113,11 @@ def main(args):
             inputs, labels = (batch["image"], batch["label"])
             inputs = inputs.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
-            oracle_labels_multires = []
-            for ps in args.patch_sizes:
-                ol = create_oracle_labels(labels, ps)
-                oracle_labels_multires.append(ol.squeeze())
-            outputs, _, _ = model(inputs, oracle_labels_multires)
-            loss = criterion(outputs, labels)
+            outputs, _, _ = model(inputs)
+            dice_loss = dice_loss_criterion(outputs, labels)
+            ce_loss = ce_loss_criterion(outputs, labels.squeeze(1).long())
+            dice_ce_loss = dice_loss + ce_loss.mean()
+            loss = dice_ce_loss
             loss = loss / args.grad_accum_steps
             loss.backward()
 
@@ -133,9 +133,9 @@ def main(args):
         dice_scores, dice_not_nans = dice_metric.aggregate()
         iou_scores, iou_not_nans = iou_metric.aggregate()
         epoch_time = time.time() - epoch_start
-        print("Train Epoch: {}, Dice score: {:.4f}, IoU score: {:.4f}, loss: {:.4f}, epoch_time: {:.4f}".format(e, dice_scores.item(), iou_scores.item(), loss.item(), epoch_time))
+        print("Train Epoch: {}, Dice score: {:.4f}, IoU score: {:.4f}, dice_ce_loss: {:.4f}, epoch_time: {:.4f}".format(e, dice_scores.item(), iou_scores.item(), dice_ce_loss.item(), epoch_time))
         if wandb.run is not None:
-            wandb.log({"train/epoch": e, 'train/dice': dice_scores.item(), 'train/iou': iou_scores.item(), 'train/loss': loss.item()}, step=e)
+            wandb.log({"train/epoch": e, 'train/dice': dice_scores.item(), 'train/iou': iou_scores.item(), 'train/loss': loss.item(), 'train/dice_ce_loss': dice_ce_loss.item()}, step=e)
         scheduler.step()
         if ((e + 1) % args.val_every_n_epochs) == 0:
             with torch.no_grad():
@@ -143,11 +143,7 @@ def main(args):
                     inputs, labels = (batch["image"], batch["label"])
                     inputs = inputs.to(device, non_blocking=True)
                     labels = labels.to(device, non_blocking=True)
-                    oracle_labels_multires = []
-                    for ps in args.patch_sizes:
-                        ol = create_oracle_labels(labels, ps)
-                        oracle_labels_multires.append(ol.squeeze())
-                    outputs, _, _ = model(inputs, oracle_labels_multires)
+                    outputs, _, _ = model(inputs)
                     labels_convert = [post_label(labels[0])]
                     output_convert = [post_pred(outputs[0])]
                     dice_metric_val(y_pred=output_convert, y=labels_convert)
