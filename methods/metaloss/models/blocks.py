@@ -46,7 +46,7 @@ class DownSampleConvBlock(nn.Module):
 
     def forward(self, x):
         x = self.conv(x)
-        x = self.LeakyReLU(x)
+        x = self.relu(x)
         #x = self.instance_norm(x)
 
         return x
