@@ -33,7 +33,32 @@ class PatchEmbedding(nn.Module):
         B, C, H, W = im.shape
         x = self.proj(im).flatten(2).transpose(1, 2)
         return x
-    
+
+class OverlapPatchEmbedding(nn.Module):
+    def __init__(self, image_size, patch_size, embed_dim, channels):
+        super().__init__()
+
+        self.image_size = image_size
+        if image_size[0] % patch_size != 0 or image_size[1] % patch_size != 0:
+            raise ValueError("image dimensions must be divisible by the patch size")
+        self.grid_size = image_size[0] // patch_size, image_size[1] // patch_size
+        self.num_patches = self.grid_size[0] * self.grid_size[1]
+        self.patch_size = patch_size
+
+        n_layers = torch.log2(torch.tensor([patch_size])).item()
+        conv_layers = []
+        emb_dim_list = [channels] + [embed_dim]*(n_layers-1)
+        for i in range(n_layers):
+            conv = nn.Sequential(nn.Conv2d(emb_dim_list[i], embed_dim, kernel_size=3, stride=2, padding=1),
+                                 nn.Tanh())
+            conv_layers.append(conv)
+        self.conv_layers = nn.Sequential(*conv_layers)
+
+    def forward(self, im):
+        B, C, H, W = im.shape
+        x = self.conv_layers(im).flatten(2).transpose(1, 2)
+        return x
+
 
 class TransformerLayer(nn.Module):
     def __init__(
@@ -74,7 +99,7 @@ class VisionTransformer(nn.Module):
         n_scales=2
     ):
         super().__init__()
-        self.patch_embed = PatchEmbedding(
+        self.patch_embed = OverlapPatchEmbedding(
             image_size,
             patch_size,
             d_model[0],
