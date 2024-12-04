@@ -107,6 +107,9 @@ class VisionTransformer(nn.Module):
             [nn.Linear(d_model[i], d_model[i] * self.split_ratio) for i in range(len(n_layers))]
         )
 
+        self.high_res_patchers = nn.ModuleList(
+            [nn.Conv2d(channels, d_model[i - 1], kernel_size=patch_size // (2 ** i), stride=patch_size // (2 ** i)) for i in
+             range(1, len(n_layers))])
 
         nn.init.trunc_normal_(self.pos_embed, std=0.02)
         self.pre_logits = nn.Identity()
@@ -166,13 +169,23 @@ class VisionTransformer(nn.Module):
         patches_scale_coords = torch.cat([scale_lvl, new_coords_1dim], dim=1)
 
         return patches_scale_coords
+
+    def add_high_res_features(self, tokens, coords, curr_scale, image):
+        patched_im = self.high_res_patchers[curr_scale](image)
+        patched_im = rearrange(patched_im, 'b c h w -> b (h w) c')
+        patched_im = patched_im[:, coords]
+        tokens = tokens + patched_im
+
+        return tokens
          
 
-    def split_input(self, tokens, oracle_labels, patches_scale_coords, curr_scale, patch_size):
+    def split_input(self, tokens, oracle_labels, patches_scale_coords, curr_scale, patch_size, im):
         tokens_at_curr_scale, coords_at_curr_scale, tokens_at_older_scale, coords_at_older_scales = self.divide_tokens_coords_on_scale(tokens, patches_scale_coords, curr_scale)
         tokens_to_split, coords_to_split, tokens_to_keep, coords_to_keep = self.divide_tokens_to_split_and_keep(tokens_at_curr_scale, coords_at_curr_scale, oracle_labels.view(-1))
         tokens_after_split = self.split_tokens(tokens_to_split, curr_scale)
         coords_after_split = self.split_coords(coords_to_split, patch_size, curr_scale)
+
+        tokens_after_split = self.add_high_res_features(tokens_after_split, coords_after_split[:, 1], curr_scale, im)
 
         all_tokens = torch.cat([tokens_at_older_scale, tokens_to_keep, tokens_after_split], dim=1)
         all_coords = torch.cat([coords_at_older_scales, coords_to_keep, coords_after_split], dim=0)
@@ -200,7 +213,7 @@ class VisionTransformer(nn.Module):
             '''
             if l_idx < self.n_scales - 1: 
                 ol =  oracle_labels[l_idx]
-                x, patches_scale_coords = self.split_input(x, ol, patches_scale_coords, l_idx, patched_im_size)
+                x, patches_scale_coords = self.split_input(x, ol, patches_scale_coords, l_idx, patched_im_size, im)
                 PS /= 2
                 patched_im_size *= 2
                 x = self.downsamplers[l_idx](x)
