@@ -39,7 +39,8 @@ def patches_to_images(patches, policy_code, grid_size):
         grid_coord = rearrange(grid_coord, '(b np) ng c -> b (np ng) c', b=batch_size)  # create batch dim
         # find and enlarege the patches that are downsize before, and break it into 4 pieces
         patch_scale = patches[scale_idx]
-        patch_scale = F.interpolate(patch_scale, scale_factor=2**inv_scale, mode='bilinear', align_corners=False, recompute_scale_factor=False)  # stacked across batch dim
+        patch_scale = patch_scale.repeat(1, 1, 2 ** inv_scale, 2 ** inv_scale)
+        #patch_scale = F.interpolate(patch_scale, scale_factor=2**inv_scale, mode='bilinear', align_corners=False, recompute_scale_factor=False)  # stacked across batch dim
         patch_scale = rearrange(patch_scale, 'b c (h1 h) (w1 w) -> b (h1 w1) c h w', h1=2**inv_scale, w1=2**inv_scale)
         patch_scale = rearrange(patch_scale, '(b np) ng c ps_h ps_w  -> b (np ng) c ps_h ps_w', b=batch_size)
 
