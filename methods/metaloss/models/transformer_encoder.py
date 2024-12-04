@@ -138,7 +138,7 @@ class VisionTransformer(nn.Module):
         self.metalosses = nn.ModuleList([nn.Sequential(
             nn.Linear(d_model[i], d_model[i]),
             nn.LeakyReLU(),
-            nn.InstanceNorm1d(d_model[i], affine=True),
+            nn.nn.LayerNorm(d_model[i]),
             nn.Linear(d_model[i], 1)) for i in range(len(n_layers))])
 
         self.high_res_patchers = nn.ModuleList(
