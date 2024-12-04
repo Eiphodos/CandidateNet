@@ -37,6 +37,45 @@ class DropPath(nn.Module):
         return f'drop_prob={round(self.drop_prob,3):0.3f}'
 
 
+class DownSampleConvBlock(nn.Module):
+    def __init__(self, in_dim, out_dim):
+        super().__init__()
+        self.conv = nn.Conv2d(in_dim, out_dim, kernel_size=3, stride=2, padding=1)
+        self.instance_norm = nn.InstanceNorm2d(out_dim, affine=True)
+        self.tanh = nn.Tanh()
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.tanh(x)
+        x = self.instance_norm(x)
+
+        return x
+
+
+class OverlapDownSample(nn.Module):
+    def __init__(self, image_size, patch_size, embed_dim, channels):
+        super().__init__()
+
+        self.image_size = image_size
+        if image_size[0] % patch_size != 0 or image_size[1] % patch_size != 0:
+            raise ValueError("image dimensions must be divisible by the patch size")
+        self.grid_size = image_size[0] // patch_size, image_size[1] // patch_size
+        self.num_patches = self.grid_size[0] * self.grid_size[1]
+        self.patch_size = patch_size
+
+        n_layers = int(torch.log2(torch.tensor([patch_size])).item())
+        conv_layers = []
+        emb_dim_list = [channels] + [embed_dim]*(n_layers-1)
+        for i in range(n_layers):
+            conv = DownSampleConvBlock(emb_dim_list[i], embed_dim)
+            conv_layers.append(conv)
+        self.conv_layers = nn.Sequential(*conv_layers)
+
+    def forward(self, im):
+        x = self.conv_layers(im)
+        return x
+
+
 class FeedForward(nn.Module):
     def __init__(self, dim, hidden_dim, dropout, out_dim=None):
         super().__init__()

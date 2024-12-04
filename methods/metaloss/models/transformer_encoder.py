@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 
 from methods.metaloss.models.utils import init_weights
-from methods.metaloss.models.blocks import Block
+from methods.metaloss.models.blocks import Block, DownSampleConvBlock, OverlapDownSample
 
 from methods.metaloss.image_utils import get_1d_coords_scale_from_h_w_ps, convert_1d_index_to_2d, convert_2d_index_to_1d
 
@@ -34,6 +34,7 @@ class PatchEmbedding(nn.Module):
         x = self.proj(im).flatten(2).transpose(1, 2)
         return x
 
+
 class OverlapPatchEmbedding(nn.Module):
     def __init__(self, image_size, patch_size, embed_dim, channels):
         super().__init__()
@@ -49,8 +50,7 @@ class OverlapPatchEmbedding(nn.Module):
         conv_layers = []
         emb_dim_list = [channels] + [embed_dim]*(n_layers-1)
         for i in range(n_layers):
-            conv = nn.Sequential(nn.Conv2d(emb_dim_list[i], embed_dim, kernel_size=3, stride=2, padding=1),
-                                 nn.Tanh())
+            conv = DownSampleConvBlock(emb_dim_list[i], embed_dim)
             conv_layers.append(conv)
         self.conv_layers = nn.Sequential(*conv_layers)
 
@@ -58,6 +58,8 @@ class OverlapPatchEmbedding(nn.Module):
         B, C, H, W = im.shape
         x = self.conv_layers(im).flatten(2).transpose(1, 2)
         return x
+
+
 
 
 class TransformerLayer(nn.Module):
@@ -136,10 +138,11 @@ class VisionTransformer(nn.Module):
         self.metalosses = nn.ModuleList([nn.Sequential(
             nn.Linear(d_model[i], d_model[i]),
             nn.LeakyReLU(),
+            nn.InstanceNorm1d(d_model[i], affine=True),
             nn.Linear(d_model[i], 1)) for i in range(len(n_layers))])
 
         self.high_res_patchers = nn.ModuleList(
-            [nn.Conv2d(channels, d_model[i - 1], kernel_size=patch_size // (2 ** i), stride=patch_size // (2 ** i)) for i in
+            [OverlapDownSample(image_size, patch_size // (2 ** i), d_model[i - 1], channels) for i in
              range(1, len(n_layers))])
 
 
