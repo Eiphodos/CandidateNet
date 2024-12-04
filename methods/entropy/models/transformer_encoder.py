@@ -128,7 +128,7 @@ class VisionTransformer(nn.Module):
     def divide_tokens_to_split_and_keep(self, tokens_at_curr_scale, patches_scale_coords_curr_scale, curr_scale):
         k_split = tokens_at_curr_scale.shape[1] // self.split_ratio
         k_keep = tokens_at_curr_scale.shape[1] - k_split
-        token_entropy = -((tokens_at_curr_scale * torch.log(tokens_at_curr_scale)).sum())
+        token_entropy = -((tokens_at_curr_scale * torch.log(tokens_at_curr_scale)).sum(dim=-1))
         tkv, tki = torch.topk(token_entropy, k=k_split, dim=1, sorted=False)
         bkv, bki = torch.topk(token_entropy, k=k_keep, dim=1, sorted=False, largest=False)
 
