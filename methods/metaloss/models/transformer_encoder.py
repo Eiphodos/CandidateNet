@@ -142,7 +142,7 @@ class VisionTransformer(nn.Module):
             nn.Linear(d_model[i], 1)) for i in range(len(n_layers))])
 
         self.high_res_patchers = nn.ModuleList(
-            [OverlapDownSample(image_size, patch_size // (2 ** i), d_model[i - 1], channels) for i in
+            [nn.Conv2d(channels, d_model[i - 1], kernel_size=patch_size // (2 ** i), stride=patch_size // (2 ** i)) for i in
              range(1, len(n_layers))])
 
 
