@@ -50,8 +50,8 @@ def main(args):
     transforms_train = monai.transforms.Compose(transform_list_train)
     transforms_val = monai.transforms.Compose(transform_list_val)
 
-    train_dataset = monai.data.Dataset(train_data, transform=transforms_train)
-    val_dataset = monai.data.Dataset(val_data, transform=transforms_val)
+    train_dataset = monai.data.CacheDataset(train_data, transform=transforms_train)
+    val_dataset = monai.data.CacheDataset(val_data, transform=transforms_val)
 
     data_loader_val = monai.data.DataLoader(
         val_dataset,
