@@ -45,9 +45,9 @@ class OverlapPatchEmbedding(nn.Module):
         self.num_patches = self.grid_size[0] * self.grid_size[1]
         self.patch_size = patch_size
 
-        n_layers = torch.log2(torch.tensor([patch_size])).item()
+        n_layers = int(torch.log2(torch.tensor([patch_size])).item())
         conv_layers = []
-        emb_dim_list = [channels] + [embed_dim]*int((n_layers-1))
+        emb_dim_list = [channels] + [embed_dim]*(n_layers-1)
         for i in range(n_layers):
             conv = nn.Sequential(nn.Conv2d(emb_dim_list[i], embed_dim, kernel_size=3, stride=2, padding=1),
                                  nn.Tanh())
