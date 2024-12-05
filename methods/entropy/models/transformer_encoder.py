@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 
 from methods.entropy.models.utils import init_weights
-from methods.entropy.models.blocks import Block
+from methods.entropy.models.blocks import Block, DownSampleConvBlock, OverlapDownSample
 
 from methods.entropy.image_utils import get_1d_coords_scale_from_h_w_ps, convert_1d_index_to_2d, convert_2d_index_to_1d
 
@@ -33,7 +33,34 @@ class PatchEmbedding(nn.Module):
         B, C, H, W = im.shape
         x = self.proj(im).flatten(2).transpose(1, 2)
         return x
-    
+
+
+class OverlapPatchEmbedding(nn.Module):
+    def __init__(self, image_size, patch_size, embed_dim, channels):
+        super().__init__()
+
+        self.image_size = image_size
+        if image_size[0] % patch_size != 0 or image_size[1] % patch_size != 0:
+            raise ValueError("image dimensions must be divisible by the patch size")
+        self.grid_size = image_size[0] // patch_size, image_size[1] // patch_size
+        self.num_patches = self.grid_size[0] * self.grid_size[1]
+        self.patch_size = patch_size
+
+        n_layers = int(torch.log2(torch.tensor([patch_size])).item())
+        conv_layers = []
+        emb_dim_list = [channels] + [embed_dim]*(n_layers-1)
+        for i in range(n_layers):
+            conv = DownSampleConvBlock(emb_dim_list[i], embed_dim)
+            conv_layers.append(conv)
+        self.conv_layers = nn.Sequential(*conv_layers)
+
+    def forward(self, im):
+        B, C, H, W = im.shape
+        x = self.conv_layers(im).flatten(2).transpose(1, 2)
+        return x
+
+
+
 
 class TransformerLayer(nn.Module):
     def __init__(
@@ -128,7 +155,7 @@ class VisionTransformer(nn.Module):
     def divide_tokens_to_split_and_keep(self, tokens_at_curr_scale, patches_scale_coords_curr_scale, curr_scale):
         k_split = tokens_at_curr_scale.shape[1] // self.split_ratio
         k_keep = tokens_at_curr_scale.shape[1] - k_split
-        token_entropy = -((tokens_at_curr_scale * torch.log(tokens_at_curr_scale)).sum(dim=-1))
+        token_entropy = (tokens_at_curr_scale ** 2).sum(dim=-1)
         tkv, tki = torch.topk(token_entropy, k=k_split, dim=1, sorted=False)
         bkv, bki = torch.topk(token_entropy, k=k_keep, dim=1, sorted=False, largest=False)
 
