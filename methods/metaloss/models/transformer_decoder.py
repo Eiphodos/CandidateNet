@@ -24,6 +24,7 @@ class SegmentationTransformer(nn.Module):
         d_model,
         d_encoder,
         n_heads,
+        n_query_tokens,
         dropout=0.0,
         drop_path_rate=0.0,
         n_cls=3,
@@ -41,7 +42,7 @@ class SegmentationTransformer(nn.Module):
         self.split_ratio = split_ratio
         self.n_cls = n_cls
         self.scale = d_model ** -0.5
-        self.internal_dim = d_model
+        self.n_query_tokens = n_query_tokens
 
         # transformer blocks
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, n_layers)]
@@ -49,29 +50,29 @@ class SegmentationTransformer(nn.Module):
             [Block(d_model, n_heads, d_model*4, dropout, dpr[i]) for i in range(n_layers)]
         )
 
-        self.cls_emb = nn.Parameter(torch.randn(1, self.internal_dim, d_model))
+        self.cls_emb = nn.Parameter(torch.randn(1, self.n_query_tokens, d_model))
         self.proj_dec = nn.Linear(d_encoder, d_model)
 
         self.proj_patch = nn.Parameter(self.scale * torch.randn(d_model, d_model))
         self.proj_classes = nn.Parameter(self.scale * torch.randn(d_model, d_model))
 
         self.decoder_norm = nn.LayerNorm(d_model)
-        self.mask_norm = nn.LayerNorm(self.internal_dim)
+        self.mask_norm = nn.LayerNorm(self.n_query_tokens)
 
 
         minimum_resolution = image_size[0] // (patch_size // 2**(n_scales-1))
         upsampling_ratio = image_size[0] // minimum_resolution
         up_proj = []
         for i in range(int(math.log(upsampling_ratio, 2))):
-            up_proj.append(nn.Conv2d(self.internal_dim, self.internal_dim, kernel_size=3, stride=1, padding=1))
-            up_proj.append(nn.InstanceNorm2d(self.internal_dim))
+            up_proj.append(nn.Conv2d(self.n_query_tokens, self.n_query_tokens, kernel_size=3, stride=1, padding=1))
+            up_proj.append(nn.InstanceNorm2d(self.n_query_tokens))
             up_proj.append(nn.LeakyReLU())
-            up_proj.append(nn.ConvTranspose2d(self.internal_dim, self.internal_dim, kernel_size=2, stride=2))
-            up_proj.append(nn.InstanceNorm2d(self.internal_dim))
+            up_proj.append(nn.ConvTranspose2d(self.n_query_tokens, self.n_query_tokens, kernel_size=2, stride=2))
+            up_proj.append(nn.InstanceNorm2d(self.n_query_tokens))
             up_proj.append(nn.LeakyReLU())
         self.conv_up_proj = nn.ModuleList(up_proj)
 
-        self.conv_out_proj = nn.Conv2d(self.internal_dim, self.n_cls, kernel_size=3, stride=1, padding=1)
+        self.conv_out_proj = nn.Conv2d(self.n_query_tokens, self.n_cls, kernel_size=3, stride=1, padding=1)
 
         self.n_patches = minimum_resolution ** 2
         self.pos_embed = nn.Sequential(nn.Linear(2, d_model), nn.ReLU(), nn.Linear(d_model, d_model))
@@ -96,7 +97,7 @@ class SegmentationTransformer(nn.Module):
         for blk in self.blocks:
             x = blk(x)
         x = self.decoder_norm(x)
-        patches, cls_seg_feat = x[:, : -self.internal_dim], x[:, -self.internal_dim :]
+        patches, cls_seg_feat = x[:, : -self.n_query_tokens], x[:, -self.n_query_tokens :]
         patches = patches @ self.proj_patch
         cls_seg_feat = cls_seg_feat @ self.proj_classes
 

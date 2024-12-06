@@ -81,6 +81,7 @@ def main(args):
                           n_layers_decoder=args.n_decoder_layers,
                           d_decoder=args.d_decoder,
                           n_heads_decoder=args.n_heads_decoder,
+                          n_query_tokens_decoder=args.n_query_tokens_decoder,
                           n_scales=len(args.patch_sizes),
                           n_cls=2,
                           decoder_type=args.decoder_type)
@@ -179,6 +180,7 @@ if __name__ == '__main__':
     parser.add_argument('--d_decoder', type=int, default=128)
     parser.add_argument('--n_decoder_layers', type=int, default=4)
     parser.add_argument('--n_heads_decoder', type=int, default=4)
+    parser.add_argument('--n_query_tokens_decoder', type=int, default=32)
     parser.add_argument('--grad_accum_steps', type=int, default=8)
     parser.add_argument('--image_size', type=int, default=512)
     parser.add_argument('--epochs', type=int, default=500)

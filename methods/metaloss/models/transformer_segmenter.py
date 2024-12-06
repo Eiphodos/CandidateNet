@@ -19,6 +19,7 @@ class MultiResSegmenter(nn.Module):
         n_cls=3,
         split_ratio=4,
         n_scales=2,
+        n_query_tokens_decoder=32,
         decoder_type='advanced') -> None:
         super().__init__()
 
@@ -38,6 +39,7 @@ class MultiResSegmenter(nn.Module):
                             d_model=d_decoder,
                             d_encoder=d_encoder[-1],
                             n_heads=n_heads_decoder,
+                            n_query_tokens=n_query_tokens_decoder,
                             n_cls=n_cls,
                             split_ratio=split_ratio,
                             n_scales=n_scales)
