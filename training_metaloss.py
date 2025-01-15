@@ -55,7 +55,7 @@ def main(args):
 
     data_loader_val = monai.data.DataLoader(
         val_dataset,
-        batch_size=1,
+        batch_size=args.batch_size_val,
         num_workers=4,
         pin_memory=True,
         drop_last=False,
@@ -64,7 +64,7 @@ def main(args):
 
     data_loader_train = monai.data.DataLoader(
         train_dataset,
-        batch_size=1,
+        batch_size=args.batch_size_train,
         num_workers=8,
         pin_memory=True,
         drop_last=True,
@@ -187,6 +187,8 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--wd', type=float, default=1e-5)
     parser.add_argument('--meta_beta', type=float, default=1.0)
+    parser.add_argument('--batch_size_train', type=int, default=32)
+    parser.add_argument('--batch_size_val', type=int, default=32)
     parser.add_argument('--val_every_n_epochs', type=int, default=10)
     parser.add_argument('--wandb_logging', action='store_true')
     parser.add_argument('--augment', action='store_true')
