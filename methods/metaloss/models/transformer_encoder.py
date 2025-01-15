@@ -7,9 +7,9 @@ import torch
 import torch.nn as nn
 
 from methods.metaloss.models.utils import init_weights
-from methods.metaloss.models.blocks import Block, DownSampleConvBlock, OverlapDownSample
+from methods.metaloss.models.blocks import Block, DownSampleConvBlock
 
-from methods.metaloss.image_utils import get_1d_coords_scale_from_h_w_ps, convert_1d_index_to_2d, convert_2d_index_to_1d
+from methods.metaloss.image_utils import get_2dpos_of_curr_ps_in_min_ps
 
 from einops import rearrange
 
@@ -115,6 +115,8 @@ class VisionTransformer(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.split_ratio = split_ratio
         self.n_scales = n_scales
+        self.min_patch_size = patch_size // (2**(n_scales - 1))
+
         # Pos Embs
         self.pos_embed = nn.Parameter(torch.randn(1, self.patch_embed.num_patches, d_model[0]))
         self.rel_pos_embs = nn.ParameterList([nn.Parameter(torch.randn(1, self.split_ratio, d_model[i])) for i in range(n_scales - 1)])
@@ -171,19 +173,28 @@ class VisionTransformer(nn.Module):
 
         tokens_to_keep = tokens_at_curr_scale[batch_indices_k, bki]
         tokens_to_split = tokens_at_curr_scale[batch_indices_s, tki]
-        coords_to_keep = patches_scale_coords_curr_scale[bki].squeeze(0)
-        coords_to_split = patches_scale_coords_curr_scale[tki].squeeze(0)
+        coords_to_keep = patches_scale_coords_curr_scale[batch_indices_k, bki]
+        coords_to_split = patches_scale_coords_curr_scale[batch_indices_s, tki]
 
         return tokens_to_split, coords_to_split, tokens_to_keep, coords_to_keep, pred_meta_loss
 
-
     def divide_tokens_coords_on_scale(self, tokens, patches_scale_coords, curr_scale):
-        indx_curr_scale = patches_scale_coords[:, 0] == curr_scale
-        indx_old_scales = patches_scale_coords[:, 0] != curr_scale 
-        coords_at_curr_scale = patches_scale_coords[indx_curr_scale]
-        coords_at_older_scales = patches_scale_coords[indx_old_scales]
-        tokens_at_curr_scale = tokens[:, indx_curr_scale, :]
-        tokens_at_older_scale = tokens[:, indx_old_scales, :]
+        indx_curr_scale = patches_scale_coords[:, :, 0] == curr_scale
+        indx_old_scales = patches_scale_coords[:, :, 0] != curr_scale
+        curr_coords = []
+        old_coords = []
+        curr_tokens = []
+        old_tokens = []
+        for b in range(patches_scale_coords.shape[0]):
+            curr_coords.append(patches_scale_coords[b, indx_curr_scale[b]])
+            old_coords.append(patches_scale_coords[b, indx_old_scales[b]])
+            curr_tokens.append(tokens[b, indx_curr_scale[b], :])
+            old_tokens.append(tokens[b, indx_old_scales[b], :])
+
+        coords_at_curr_scale = torch.stack(curr_coords, dim=0)
+        coords_at_older_scales = torch.stack(old_coords, dim=0)
+        tokens_at_curr_scale = torch.stack(curr_tokens, dim=0)
+        tokens_at_older_scale = torch.stack(old_tokens, dim=0)
 
         return tokens_at_curr_scale, coords_at_curr_scale, tokens_at_older_scale, coords_at_older_scales
     
@@ -196,27 +207,30 @@ class VisionTransformer(nn.Module):
         return x_splitted
 
     def split_coords(self, coords_to_split, patch_size, curr_scale):
+        batch_size = coords_to_split.shape[0]
         new_scale = curr_scale + 1
-        new_coord_ratio = self.split_ratio // 2
-        two_d_coords = convert_1d_index_to_2d(coords_to_split[:, 1], patch_size)
-        a = torch.stack([two_d_coords[:, 0] * new_coord_ratio, two_d_coords[:, 1] * new_coord_ratio])
-        b = torch.stack([two_d_coords[:, 0] * new_coord_ratio, two_d_coords[:, 1] * new_coord_ratio + 1])
-        c = torch.stack([two_d_coords[:, 0] * new_coord_ratio + 1, two_d_coords[:, 1] * new_coord_ratio])
-        d = torch.stack([two_d_coords[:, 0] * new_coord_ratio + 1, two_d_coords[:, 1] * new_coord_ratio + 1])
+        new_coord_ratio = self.n_scales - new_scale
+        a = torch.stack([coords_to_split[:, :, 1], coords_to_split[:, :, 2]], dim=2)
+        b = torch.stack([coords_to_split[:, :, 1] + new_coord_ratio, coords_to_split[:, :, 2]], dim=2)
+        c = torch.stack([coords_to_split[:, :, 1], coords_to_split[:, :, 2] + new_coord_ratio], dim=2)
+        d = torch.stack([coords_to_split[:, :, 1] + new_coord_ratio, coords_to_split[:, :, 2] + new_coord_ratio], dim=2)
 
-        new_coords_2dim = torch.stack([a, b, c, d]).permute(2, 0, 1)
-        new_coords_2dim = rearrange(new_coords_2dim, 'n s c -> (n s) c', s=self.split_ratio, c=2)
-        new_coords_1dim = convert_2d_index_to_1d(new_coords_2dim, patch_size * 2).unsqueeze(1).int()
+        new_coords_2dim = torch.stack([a, b, c, d], dim=2)
+        new_coords_2dim = rearrange(new_coords_2dim, 'b n s c -> b (n s) c', s=self.split_ratio, c=2)
 
-        scale_lvl = torch.tensor([[new_scale]] * new_coords_1dim.shape[0]).to('cuda').int()
-        patches_scale_coords = torch.cat([scale_lvl, new_coords_1dim], dim=1)
+        scale_lvl = torch.tensor([new_scale] * new_coords_2dim.shape[1])
+        scale_lvl = scale_lvl.repeat(batch_size, 1)
+        scale_lvl = scale_lvl.to('cuda').int().unsqueeze(2)
+        patches_scale_coords = torch.cat([scale_lvl, new_coords_2dim], dim=2)
 
         return patches_scale_coords
 
     def add_high_res_features(self, tokens, coords, curr_scale, image):
         patched_im = self.high_res_patchers[curr_scale](image)
-        patched_im = rearrange(patched_im, 'b c h w -> b (h w) c')
-        patched_im = patched_im[:, coords]
+        b = torch.arange(coords.shape[0]).unsqueeze(-1).expand(-1, coords.shape[1])
+        x = coords[..., 0] // 2**(self.n_scales - curr_scale - 2)
+        y = coords[..., 1] // 2**(self.n_scales - curr_scale - 2)
+        patched_im = patched_im[b, :, x, y]
         tokens = tokens + patched_im
 
         return tokens
@@ -225,15 +239,15 @@ class VisionTransformer(nn.Module):
 
     def split_input(self, tokens, patches_scale_coords, curr_scale, patch_size, im):
         tokens_at_curr_scale, coords_at_curr_scale, tokens_at_older_scale, coords_at_older_scales = self.divide_tokens_coords_on_scale(tokens, patches_scale_coords, curr_scale)
-        meta_loss_coords = coords_at_curr_scale[:,1]
+        meta_loss_coords = coords_at_curr_scale[:, :, 1:]
         tokens_to_split, coords_to_split, tokens_to_keep, coords_to_keep, pred_meta_loss = self.divide_tokens_to_split_and_keep(tokens_at_curr_scale, coords_at_curr_scale, curr_scale)
         tokens_after_split = self.split_tokens(tokens_to_split, curr_scale)
         coords_after_split = self.split_coords(coords_to_split, patch_size, curr_scale)
 
-        tokens_after_split = self.add_high_res_features(tokens_after_split, coords_after_split[:, 1], curr_scale, im)
+        hr_tokens_after_split = self.add_high_res_features(tokens_after_split, coords_after_split[:, :, 1:], curr_scale, im)
 
         all_tokens = torch.cat([tokens_at_older_scale, tokens_to_keep, tokens_after_split], dim=1)
-        all_coords = torch.cat([coords_at_older_scales, coords_to_keep, coords_after_split], dim=0)
+        all_coords = torch.cat([coords_at_older_scales, coords_to_keep, coords_after_split], dim=1)
 
         return all_tokens, all_coords, pred_meta_loss, meta_loss_coords
 
@@ -245,18 +259,12 @@ class VisionTransformer(nn.Module):
         x = self.patch_embed(im)
         x = x + self.pos_embed
 
-        patches_scale_coords = get_1d_coords_scale_from_h_w_ps(H, W, PS, 0).to('cuda')
+        patches_scale_coords = get_2dpos_of_curr_ps_in_min_ps(H, W, PS, self.min_patch_size, 0).to('cuda')
+        patches_scale_coords = patches_scale_coords.repeat(B, 1, 1)
         meta_losses = []
         meta_loss_coords = []
         for l_idx in range(len(self.layers)):
             x = self.layers[l_idx](x)
-            #print("Current total number of tokens in layer {}: {}".format(blk_idx, x.shape[1]))
-            '''
-            for s in range(blk_idx + 1):
-                indx_scale = patches_scale_coords[:, 0] == s
-                coords_at_scale = patches_scale_coords[indx_scale]
-                print("Current number of tokens at scale {} in layer {}: {}".format(s, blk_idx, len(coords_at_scale)))
-            '''
             if l_idx < self.n_scales - 1: 
                 x, patches_scale_coords, meta_loss, meta_loss_coord = self.split_input(x, patches_scale_coords, l_idx, patched_im_size, im)
                 PS /= 2

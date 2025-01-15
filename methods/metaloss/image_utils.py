@@ -93,6 +93,19 @@ def convert_2d_index_to_1d(two_dim_index, PS):
     one_dim_index = two_dim_index[:, 0] * PS + two_dim_index[:, 1]
     return one_dim_index
 
+def get_2dpos_of_curr_ps_in_min_ps(height, width, patch_size, min_patch_size, scale):
+    patches_coords = torch.meshgrid(torch.arange(0, height // min_patch_size, patch_size // min_patch_size),
+                                    torch.arange(0, width // min_patch_size, patch_size // min_patch_size),
+                                    indexing='ij')
+    patches_coords = torch.stack([patches_coords[0], patches_coords[1]])
+    patches_coords = patches_coords.permute(1, 2, 0)
+    patches_coords = patches_coords.view(-1, 2)
+    n_patches = patches_coords.shape[0]
+
+    scale_lvl = torch.tensor([[scale]] * n_patches)
+    patches_scale_coords = torch.cat([scale_lvl, patches_coords], dim=1)
+    return patches_scale_coords
+
 def get_2d_coords_scale_from_h_w_ps(height, width, patch_size, scale):
     patches_coords = torch.meshgrid(torch.arange(0, height // patch_size), torch.arange(0, width // patch_size), indexing='ij')
     patches_coords = torch.stack([patches_coords[0], patches_coords[1]])

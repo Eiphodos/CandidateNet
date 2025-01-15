@@ -75,7 +75,7 @@ class SegmentationTransformer(nn.Module):
         self.conv_out_proj = nn.Conv2d(self.n_query_tokens, self.n_cls, kernel_size=3, stride=1, padding=1)
 
         self.n_patches = minimum_resolution ** 2
-        self.pos_embed = nn.Sequential(nn.Linear(2, d_model), nn.ReLU(), nn.Linear(d_model, d_model))
+        self.pos_embed = nn.Sequential(nn.Linear(3, d_model), nn.ReLU(), nn.Linear(d_model, d_model))
 
         self.apply(init_weights)
         nn.init.trunc_normal_(self.cls_emb, std=0.02)
@@ -108,20 +108,10 @@ class SegmentationTransformer(nn.Module):
         masks = masks.unsqueeze(1)
         masks = rearrange(masks, "b h w c -> b c h w")
 
-        max_scale = patch_code[:, 0].max()
+        max_scale = patch_code[:, :, 0].max()
         new_coord_PS = self.patch_size // 2**max_scale
         new_GS = H // new_coord_PS
-        org_patch_codes_list = []
-        for scale in range(0, max_scale + 1):
-            indx_curr_scale = patch_code[:, 0] == scale
-            coords_curr_scale = patch_code[indx_curr_scale, 1]
-            scale_curr_scale = patch_code[indx_curr_scale, 0]
-            org_patch_codes = convert_1d_patched_index_to_2d_org_index(coords_curr_scale, H, self.patch_size, scale, new_coord_PS).cuda()
-            org_patch_codes = torch.cat([scale_curr_scale.unsqueeze(1), org_patch_codes], dim=1)
-            org_patch_codes_list.append(org_patch_codes)
-        patch_code_org = torch.cat(org_patch_codes_list, dim=0).unsqueeze(0)
-
-        masks = patches_to_images(masks, patch_code_org, (new_GS, new_GS))
+        masks = patches_to_images(masks, patch_code, (new_GS, new_GS))
         #masks = F.interpolate(masks, size=(H, W), mode="bilinear", align_corners=False)
         #masks = self.conv_up_proj(masks)
         #masks = self.out_norm(masks)
