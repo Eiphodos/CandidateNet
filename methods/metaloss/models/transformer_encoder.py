@@ -209,7 +209,7 @@ class VisionTransformer(nn.Module):
     def split_coords(self, coords_to_split, patch_size, curr_scale):
         batch_size = coords_to_split.shape[0]
         new_scale = curr_scale + 1
-        new_coord_ratio = self.n_scales - new_scale
+        new_coord_ratio = 2**(self.n_scales - new_scale - 1)
         a = torch.stack([coords_to_split[:, :, 1], coords_to_split[:, :, 2]], dim=2)
         b = torch.stack([coords_to_split[:, :, 1] + new_coord_ratio, coords_to_split[:, :, 2]], dim=2)
         c = torch.stack([coords_to_split[:, :, 1], coords_to_split[:, :, 2] + new_coord_ratio], dim=2)
@@ -261,12 +261,21 @@ class VisionTransformer(nn.Module):
 
         patches_scale_coords = get_2dpos_of_curr_ps_in_min_ps(H, W, PS, self.min_patch_size, 0).to('cuda')
         patches_scale_coords = patches_scale_coords.repeat(B, 1, 1)
+        psc_n = patches_scale_coords.shape[1] // 2
+        psc_small = patches_scale_coords[0, 0:8, :]
+        psc_small2 = patches_scale_coords[0, psc_n-4:psc_n+4, :]
+        psc_small3 = patches_scale_coords[0, -8:, :]
+        psc_max = patches_scale_coords.max()
         meta_losses = []
         meta_loss_coords = []
         for l_idx in range(len(self.layers)):
             x = self.layers[l_idx](x)
             if l_idx < self.n_scales - 1: 
                 x, patches_scale_coords, meta_loss, meta_loss_coord = self.split_input(x, patches_scale_coords, l_idx, patched_im_size, im)
+                psc_n = patches_scale_coords.shape[1] // 2
+                psc_small = patches_scale_coords[0, 0:8, :]
+                psc_small2 = patches_scale_coords[0, psc_n - 4:psc_n + 4, :]
+                psc_small3 = patches_scale_coords[0, -8:, :]
                 PS /= 2
                 patched_im_size *= 2
                 x = self.downsamplers[l_idx](x)
